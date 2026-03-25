@@ -1,0 +1,1914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Momentum HQ</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f3;}
+:root{
+  --font-sans:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --color-background-primary:#ffffff;
+  --color-background-secondary:#f5f5f3;
+  --color-background-tertiary:#eeede9;
+  --color-text-primary:#1a1915;
+  --color-text-secondary:#5c5c57;
+  --color-text-tertiary:#9b9a96;
+  --color-border-tertiary:#e8e7e3;
+  --color-border-secondary:#d4d3cf;
+  --border-radius-sm:4px;
+  --border-radius-md:6px;
+  --border-radius-lg:10px;
+}
+input,select,textarea,button{font-family:inherit;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#d4d3cf;border-radius:3px;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef}=React;
+
+// ── Supabase ──────────────────────────────────────────────────────────────────
+const sb=supabase.createClient(
+  "https://mhvwvtjpyvdstqbryigz.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1odnd2dGpweXZkc3RxYnJ5aWd6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxOTgzODAsImV4cCI6MjA4OTc3NDM4MH0.TOYNWx8bZ6HbuuhpIajgNMh9CbDyk8znHdLas9q4_kI"
+);
+async function dbLoad(){
+  try{
+    const{data,error}=await sb.from("momentum_data").select("data").eq("id","main").single();
+    if(error)throw error;
+    return data?.data||null;
+  }catch(e){console.error("Supabase load error:",e);return null;}
+}
+async function dbSave(payload){
+  try{
+    const{error}=await sb.from("momentum_data").upsert({id:"main",data:payload,updated_at:new Date().toISOString()});
+    if(error)throw error;
+  }catch(e){console.error("Supabase save error:",e);}
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+const BRAND="#E8562A",BL="#FDF0EC",BD="#B83E18";
+const GP_NAME={hannah:"Hannah",harry:"Harry",gen:"Gen",katie:"Katie",sumaya:"Sumaya",tbd:"TBD"};
+const GP_COLOR={hannah:BRAND,harry:"#378ADD",gen:"#D4537E",katie:"#8B5CF6",sumaya:"#059669",tbd:"#888"};
+const GP_INI={hannah:"H",harry:"Ha",gen:"G",katie:"K",sumaya:"S",tbd:"?"};
+const PKGS=["Outbound Starter","Pipeline Builder","Scale","LinkedIn Only","Local Outreach","Inbound","Other"];
+const ST_OB=["Intelligence Gathering","Segment & Hypothesise","Who Cares","Why They Care","How to Reach Them","Convert & Prove","The Playbook"];
+const ST_PB=["Onboarding","Active Delivery","Review","Renewal"];
+const ST_OT=["Onboarding","Active","Paused","Completed"];
+const CLI_ST=["active","onboarding","confirmed","paused","churned"];
+function getStages(p){if(p==="Outbound Starter")return ST_OB;if(p==="Pipeline Builder"||p==="Scale")return ST_PB;return ST_OT;}
+
+const USERS=[
+  {id:"hannah",name:"Hannah",email:"hannah@momentumsales.co.uk",password:"momentum",role:"admin",color:BRAND,ini:"H"},
+  {id:"harry",name:"Harry",email:"harry@momentumsales.co.uk",password:"harry123",role:"salesperson",color:"#378ADD",ini:"Ha"},
+  {id:"gen",name:"Gen",email:"gen@momentumsales.co.uk",password:"gen123",role:"ops",color:"#D4537E",ini:"G"},
+  {id:"katie",name:"Katie",email:"katie@momentumsales.co.uk",password:"katie123",role:"salesperson",color:"#8B5CF6",ini:"K"},
+  {id:"sumaya",name:"Sumaya",email:"sumaya@momentumsales.co.uk",password:"sumaya123",role:"salesperson",color:"#059669",ini:"S"},
+];
+const getUser=id=>USERS.find(u=>u.id===id);
+
+// ── Date helpers ──────────────────────────────────────────────────────────────
+function localDateStr(d){
+  return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function todayStr(){return localDateStr(new Date());}
+function getISOWeek(date=new Date()){
+  const d=new Date(date);d.setHours(12,0,0,0);d.setDate(d.getDate()+3-(d.getDay()+6)%7);
+  const w1=new Date(d.getFullYear(),0,4);
+  return`${d.getFullYear()}-W${String(1+Math.round(((d-w1)/86400000-3+(w1.getDay()+6)%7)/7)).padStart(2,"0")}`;
+}
+function getWeekStart(wid){
+  const[yr,wk]=wid.split("-W");const j4=new Date(Number(yr),0,4);
+  const dow=(j4.getDay()+6)%7;const m=new Date(j4);m.setDate(j4.getDate()-dow);
+  m.setDate(m.getDate()+(Number(wk)-1)*7);return m;
+}
+function getUpcomingMondays(n=16){
+  const mondays=[];const d=new Date();
+  const day=d.getDay();const diff=day===1?0:(8-day)%7||7;
+  d.setDate(d.getDate()+diff);d.setHours(12,0,0,0);
+  for(let i=0;i<n;i++){mondays.push(new Date(d));d.setDate(d.getDate()+7);}
+  return mondays;
+}
+const blankWeek=()=>({calls:0,connectedCalls:0,noAnswer:0,wrongNumber:0,voicemails:0,emailsSent:0,linkedinSent:0,contactsWorked:0,mb:0,ma:0,newDeals:0,dealsWon:0,hotLeads:0,warmLeads:0,pipelineValue:0,closedWonValue:0,dtm:0,dt:0,lis:0});
+function sumWeeks(weeks){const b=blankWeek();for(const w of weeks)for(const k of Object.keys(b))b[k]=(b[k]||0)+(w[k]||0);return b;}
+function getAggStats(history,period="all"){
+  if(!history||!history.length)return blankWeek();
+  const now=new Date();let weeks=history;
+  if(period==="week"){const cur=getISOWeek();weeks=history.filter(h=>h.weekId===cur);}
+  else if(period==="month"){const ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;weeks=history.filter(h=>{const ws=getWeekStart(h.weekId);return`${ws.getFullYear()}-${String(ws.getMonth()+1).padStart(2,"0")}`===ym;});}
+  else if(period==="quarter"){const q=Math.floor(now.getMonth()/3);weeks=history.filter(h=>{const ws=getWeekStart(h.weekId);return ws.getFullYear()===now.getFullYear()&&Math.floor(ws.getMonth()/3)===q;});}
+  return sumWeeks(weeks);
+}
+const fmt=d=>{if(!d)return"—";try{return new Date(d+"T12:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}catch{return String(d);}};
+const pct=(a,b)=>b>0?Math.round(a/b*100)+"%":"—";
+const fmtMonth=m=>{const[y,mo]=m.split("-");return new Date(Number(y),Number(mo)-1,1).toLocaleDateString("en-GB",{month:"long",year:"numeric"});};
+
+// ── Commission config ─────────────────────────────────────────────────────────
+const CLIENT_COMMISSION_CONFIG={
+  1:{type:"perMeeting",ratePerMeeting:150,label:"£150 per attended meeting"},
+  2:{type:"perMeeting",ratePerMeeting:150,label:"£150 per attended meeting"},
+  3:{type:"grid",label:"8%/6% tiered months 1-6 · 10%/8% month 7+"},
+  4:{type:"dealPercent",rate:0.08,label:"8% on closed-won deals"},
+  5:{type:"margin",rate:0.5,label:"50% of monthly profit margin"},
+  6:{type:"mixed",ratePerMeeting:150,dealRate:0.1,dealCap:2000,label:"£150 per attended meeting + 10% closed-won (capped £2k/deal)"},
+  7:{type:"perMeeting",ratePerMeeting:75,label:"£75 per attended meeting"},
+  8:{type:"perMeeting",ratePerMeeting:150,label:"£150 per attended meeting"},
+};
+const CLIENT_COMMISSION_BY_NAME={
+  "guessworks":{type:"mixed",ratePerMeeting:250,dealFixed:750,label:"£250 per attended meeting + £750 per closed-won deal"},
+};
+function getClientCommConfig(clientId,clientName=""){
+  if(CLIENT_COMMISSION_CONFIG[clientId])return CLIENT_COMMISSION_CONFIG[clientId];
+  return CLIENT_COMMISSION_BY_NAME[(clientName||"").toLowerCase().trim()]||null;
+}
+function calcTeamCommission(n){
+  let t=0,r=n,c=0;
+  for(const[max,rate]of[[10,50],[20,65],[Infinity,85]]){const inn=Math.min(r,max-c);if(inn<=0)break;t+=inn*rate;r-=inn;c+=inn;if(r<=0)break;}
+  return t;
+}
+function calcGRIDRate(startDate,amount){
+  if(!startDate)return{rate:0.08,label:"8%"};
+  const months=Math.floor((new Date()-new Date(startDate))/(1000*60*60*24*30));
+  if(months<7)return amount<=20000?{rate:0.08,label:"8% (months 1-6, ≤£20k)"}:{rate:0.06,label:"6% (months 1-6, >£20k)"};
+  return amount<=20000?{rate:0.10,label:"10% (month 7+, ≤£20k)"}:{rate:0.08,label:"8% (month 7+, >£20k)"};
+}
+
+// ── Monday meeting template ───────────────────────────────────────────────────
+const MONDAY_AGENDA_TEMPLATE=[
+  {id:"wins",section:"Wins from last week",items:["Harry — top win / meeting attended","Gen — ops highlight","Hannah — business update"]},
+  {id:"pipeline",section:"Pipeline review",items:["Hot leads across all clients","Warm leads to follow up","Deals closed since last week"]},
+  {id:"clients",section:"Client updates",items:["JGW (Andy Vaughan) — any flags?","Laser Red — dial progress","GRID — contract status","Presented — campaign update","Guessworks — pipeline update","Projectory — meeting target progress","Beaumonde — onboarding progress","Phoenix Maxwell — Katie update","Mongoose — GP assignment confirmed?"]},
+  {id:"capacity",section:"Team capacity",items:["Harry — workload this week","Gen — ops capacity","Katie — onboarding status","Sumaya — onboarding status"]},
+  {id:"priorities",section:"This week's priorities",items:["Hannah's #1 priority","Harry's #1 priority","Gen's #1 priority"]},
+  {id:"blockers",section:"Blockers",items:["Anything needing Hannah's input or decision","Any client at risk","Any systems or process issues"]},
+  {id:"actions",section:"Actions from this meeting",items:["Action 1 — assign owner","Action 2 — assign owner","Action 3 — assign owner"]},
+];
+
+// ── Seed data ─────────────────────────────────────────────────────────────────
+const SEED={
+  meetings:[
+    {id:2,clientId:3,client:"GRID",contact:"",sp:"harry",booked:"2026-03-08",attended:null,status:"booked"},
+    {id:4,clientId:2,client:"Laser Red",contact:"",sp:"harry",booked:"2026-03-15",attended:null,status:"booked"},
+    {id:7,clientId:7,client:"Projectory",contact:"",sp:"harry",booked:"2026-03-22",attended:null,status:"booked"},
+  ],
+  commissions:[],
+  leaveRequests:[
+    {id:1,employee:"harry",type:"holiday",startDate:"2026-04-07",endDate:"2026-04-11",days:5,reason:"Family holiday",status:"approved"},
+    {id:2,employee:"gen",type:"holiday",startDate:"2026-05-02",endDate:"2026-05-02",days:1,reason:"Personal day",status:"pending"},
+  ],
+  trainings:[
+    {id:1,title:"Cold Call Mastery",cat:"Sales",desc:"Step-by-step framework for booking meetings.",video:"",content:"# Cold Call Mastery\n\n**Framework:**\n1. Hook — why you're calling in 10 seconds\n2. Permission — 'Is this a bad time?'\n3. Value statement\n4. Soft ask — 'Would it make sense to chat briefly next week?'\n\n**Key objections:**\n- 'Not interested' → 'What's usually getting in the way of more leads?'\n- 'Send me an email' → 'What's the one thing I should focus on?'\n- 'We have someone' → 'Worth 15 mins to compare notes?'",done:[]},
+    {id:2,title:"Email Sequence Best Practices",cat:"Sales",desc:"Write outreach emails that get replies.",video:"",content:"# Email Sequence Best Practices\n\n**4-email sequence:**\n1. First touch — problem-led, no pitch\n2. Follow-up 1 (day 3) — add insight\n3. Follow-up 2 (day 7) — social proof\n4. Break-up (day 14) — give them an out",done:[]},
+    {id:3,title:"CRM & Systems Walkthrough",cat:"Operations",desc:"Log activities, update pipelines and track commissions.",video:"",content:"# CRM & Systems Walkthrough\n\n**Daily must-dos:**\n1. Log every call outcome within the hour\n2. Update deal stage after every meeting\n3. Set a follow-up task before closing any record",done:[]},
+    {id:4,title:"Objection Handling Playbook",cat:"Sales",desc:"Turn common objections into conversations.",video:"",content:"# Objection Handling Playbook\n\n**The CLARA method:**\n- Clarify — 'What do you mean exactly?'\n- Listen — don't rush to respond\n- Acknowledge — validate the concern\n- Reframe — shift the perspective\n- Ask — move forward with a question",done:[]},
+    {id:5,title:"Company Values & Mission",cat:"Culture",desc:"Who we are, what we stand for, how we work.",video:"",content:"# Momentum Sales — Who We Are\n\n**Mission:** Help agencies scale past £500k through systematic, relationship-based outbound.\n\n**Values:**\n1. Quality over volume\n2. Authentic relationship selling\n3. Team capacity protection\n4. Systematic excellence\n5. Sustainable growth",done:[]},
+  ],
+  documents:[
+    {id:1,title:"Commission Policy",cat:"Finance",content:"# Commission Policy\n\n**Rate:** Tiered monthly — £50/meeting for meetings 1-10, £65 for 11-20, £85 for 21+.\n\n**Payment:** End of month following attended meeting.",updated:"2026-01-15"},
+    {id:2,title:"Holiday & Leave Policy",cat:"HR",content:"# Holiday & Leave Policy\n\n**Entitlement:** 28 days per year (inc. bank holidays).\n\n**Sick leave:** Log same day.",updated:"2026-01-10"},
+    {id:3,title:"Sales Process SOP",cat:"Operations",content:"# Sales Process SOP\n\n**Stage 1 — Prospecting:** Build list from ICP.\n\n**Stage 2 — Outreach:** Lead with cold call. Follow up with email sequence.",updated:"2026-02-01"},
+    {id:4,title:"Client Onboarding Checklist",cat:"Operations",content:"# Client Onboarding Checklist\n\n**Week 1:** Kick-off call, ICP agreed, messaging signed off, CRM set up.\n\n**Week 2:** Campaign launched, first report sent.",updated:"2026-02-20"},
+  ],
+  clients:[
+    {id:1,name:"JGW (Andy Vaughan)",pkg:"Pipeline Builder",gp:"harry",status:"active",stage:"Active Delivery",closedWonValue:14000,notes:"£172k pipeline built. Downgrading to 200 leads. £1,600/mo.",actions:["Chase Andy on downgrade confirmation"],insights:[{text:"Warm relationship — Andy is engaged",date:"2026-03-14",author:"Hannah"}],history:[]},
+    {id:2,name:"Laser Red",pkg:"Pipeline Builder",gp:"harry",status:"active",stage:"Active Delivery",closedWonValue:0,notes:"Harry has leads dialling. £2,750/mo.",actions:["Complete dials this week"],insights:[],history:[]},
+    {id:3,name:"GRID",pkg:"Pipeline Builder",gp:"harry",status:"onboarding",stage:"Onboarding",closedWonValue:0,notes:"Contract not yet signed — CHASE. £2,750/mo.",actions:["Chase contract signature ASAP"],insights:[{text:"Contract delay is a risk",date:"2026-03-14",author:"Hannah"}],history:[]},
+    {id:4,name:"Presented",pkg:"Outbound Starter",gp:"hannah",status:"active",stage:"Who Cares",closedWonValue:0,notes:"Month 2. LinkedIn campaigns active.",actions:["Call new LinkedIn connections as they accept"],insights:[{text:"Healthcare agencies responding better",date:"2026-03-14",author:"Hannah"}],history:[]},
+    {id:5,name:"Phoenix Maxwell",pkg:"Outbound Starter",gp:"katie",status:"onboarding",stage:"Intelligence Gathering",closedWonValue:0,notes:"B2B telecoms. Katie onboarding.",actions:["Katie: HubSpot walkthrough this week"],insights:[],history:[]},
+    {id:6,name:"Sarah Rees / Beaumonde",pkg:"Outbound Starter",gp:"hannah",status:"onboarding",stage:"Intelligence Gathering",closedWonValue:0,notes:"Cross-border M&A advisory. £1,500/mo.",actions:["Strategy call next Mon/Tue"],insights:[{text:"Primary offer: Deal Origination — £5-8k/month",date:"2026-03-14",author:"Hannah"}],history:[]},
+    {id:7,name:"Projectory",pkg:"Outbound Starter",gp:"harry",status:"active",stage:"Why They Care",closedWonValue:0,notes:"4 meetings target. Active campaign.",actions:["Hit 4 meetings target by end of month"],insights:[{text:"Capacity/growth messaging resonating",date:"2026-03-14",author:"Hannah"}],history:[]},
+    {id:8,name:"Mongoose",pkg:"Pipeline Builder",gp:"tbd",status:"confirmed",stage:"Onboarding",closedWonValue:0,notes:"Verbal confirmed. April start. £2,750/mo.",actions:["Assign Growth Partner","Send welcome email"],insights:[],history:[]},
+  ],
+  marketing:{
+    posts:[
+      {id:1,platform:"LinkedIn (personal)",title:"Why most agency owners never escape delivery",date:"2026-03-10",status:"published",reach:2840,impressions:3100,likes:87,comments:12,shares:6,notes:""},
+      {id:2,platform:"LinkedIn (personal)",title:"The 1:85 ratio that changed how we think about outbound",date:"2026-03-17",status:"published",reach:1920,impressions:2200,likes:54,comments:8,shares:3,notes:""},
+      {id:3,platform:"LinkedIn (personal)",title:"What no one tells you about hiring your first rep",date:"2026-03-28",status:"scheduled",reach:0,impressions:0,likes:0,comments:0,shares:0,notes:""},
+    ],
+    ideas:[
+      {id:1,title:"The feast-famine cycle — why it happens and how to break it",platform:"LinkedIn (personal)",angle:"Problem-aware post targeting agency owners",status:"idea",createdAt:"2026-03-14"},
+      {id:2,title:"5 objections we hear every week on cold calls",platform:"LinkedIn (personal)",angle:"Tactical/value post — good for engagement",status:"drafting",createdAt:"2026-03-15"},
+    ],
+  },
+  calendarEvents:[
+    {id:101,title:"Hannah / Harry 1-1",date:"2026-03-23",type:"internal",notes:"Monthly check-in.",createdBy:"hannah"},
+    {id:102,title:"Hannah / Gen 1-1",date:"2026-03-24",type:"internal",notes:"Monthly ops check-in.",createdBy:"hannah"},
+    {id:103,title:"JGW — Andy Vaughan check-in",date:"2026-03-22",type:"meeting",notes:"Follow up on downgrade conversation.",createdBy:"hannah"},
+    {id:104,title:"GRID — chase contract signature",date:"2026-03-23",type:"deadline",notes:"Must be signed before any dialling starts.",createdBy:"hannah"},
+    {id:105,title:"Mongoose — GP assignment deadline",date:"2026-03-28",type:"deadline",notes:"GP must be confirmed before April 1.",createdBy:"hannah"},
+    {id:106,title:"Q1 team review",date:"2026-03-31",type:"internal",notes:"End of quarter — pipeline, revenue, Q2 planning.",createdBy:"hannah"},
+  ],
+  mondayMeetings:{},
+  closedWonDeals:[],
+  clientInvoices:[],
+};
+
+// ── Style helpers ─────────────────────────────────────────────────────────────
+function minp(o={}){return{padding:"7px 10px",borderRadius:6,border:"0.5px solid #ccc",fontSize:13,background:"#fff",color:"#111",fontFamily:"inherit",width:"100%",boxSizing:"border-box",...o};}
+function msel(o={}){return{padding:"7px 10px",borderRadius:6,border:"0.5px solid #ccc",fontSize:13,background:"#fff",color:"#111",fontFamily:"inherit",width:"100%",boxSizing:"border-box",...o};}
+function mlbl(){return{fontSize:12,color:"#555",marginBottom:4,display:"block"};}
+
+const S={
+  app:{display:"flex",height:"100vh",fontFamily:"inherit",background:"var(--color-background-tertiary)",overflow:"hidden"},
+  sb:{width:224,background:"var(--color-background-primary)",borderRight:"0.5px solid var(--color-border-tertiary)",display:"flex",flexDirection:"column",flexShrink:0},
+  sbh:{padding:"20px 16px 12px",borderBottom:"0.5px solid var(--color-border-tertiary)"},
+  lm:{width:28,height:28,borderRadius:"50%",background:BRAND,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,fontWeight:500,marginBottom:10},
+  nav:{flex:1,padding:"8px",overflowY:"auto"},
+  ns:{fontSize:10,fontWeight:600,color:"var(--color-text-tertiary)",letterSpacing:"0.08em",textTransform:"uppercase",padding:"14px 8px 4px"},
+  ni:a=>({display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:6,cursor:"pointer",fontSize:13,color:a?"#fff":"var(--color-text-secondary)",background:a?BRAND:"transparent",fontWeight:a?500:400,marginBottom:1,border:"none",width:"100%",textAlign:"left",fontFamily:"inherit"}),
+  ua:{padding:"12px 16px",borderTop:"0.5px solid var(--color-border-tertiary)"},
+  av:col=>({width:28,height:28,borderRadius:"50%",background:col+"22",color:col,fontSize:11,fontWeight:500,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}),
+  main:{flex:1,overflow:"auto",padding:"24px 28px"},
+  pt:{fontSize:18,fontWeight:500,color:"var(--color-text-primary)",marginBottom:4},
+  ps:{fontSize:13,color:"var(--color-text-tertiary)",marginBottom:20},
+  g:n=>({display:"grid",gridTemplateColumns:`repeat(${n},minmax(0,1fr))`,gap:12,marginBottom:16}),
+  mc:{background:"var(--color-background-secondary)",borderRadius:8,padding:"14px 16px"},
+  card:{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:10,padding:"16px 20px",marginBottom:16},
+  ct:{fontSize:14,fontWeight:500,color:"var(--color-text-primary)",marginBottom:12},
+  tbl:{width:"100%",borderCollapse:"collapse"},
+  th:{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",textAlign:"left",padding:"0 8px 8px",borderBottom:"0.5px solid var(--color-border-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em"},
+  td:{fontSize:13,color:"var(--color-text-primary)",padding:"10px 8px",borderBottom:"0.5px solid var(--color-border-tertiary)",verticalAlign:"middle"},
+  bdg:t=>{const m={attended:["#E1F5EE","#0F6E56"],booked:[BL,BD],cancelled:["#F1EFE8","#5F5E5A"],"no-show":["#FCEBEB","#A32D2D"],rescheduled:["#FAEEDA","#854F0B"],paid:["#EAF3DE","#3B6D11"],pending:["#FAEEDA","#854F0B"],approved:["#EAF3DE","#3B6D11"],rejected:["#FCEBEB","#A32D2D"],holiday:["#E6F1FB","#185FA5"],sick:["#FAECE7","#993C1D"],Sales:["#EEEDFE","#3C3489"],Operations:["#E1F5EE","#0F6E56"],Culture:["#FAEEDA","#854F0B"],Finance:["#EAF3DE","#3B6D11"],HR:["#EEEDFE","#3C3489"],active:["#EAF3DE","#3B6D11"],onboarding:[BL,BD],confirmed:["#E6F1FB","#185FA5"],paused:["#F1EFE8","#5F5E5A"],churned:["#FCEBEB","#A32D2D"],published:["#EAF3DE","#3B6D11"],scheduled:[BL,BD],draft:["#F1EFE8","#5F5E5A"],idea:["#EEEDFE","#3C3489"],drafting:["#FAEEDA","#854F0B"],invoiced:[BL,BD]};const[bg,co]=m[t]||["#F1EFE8","#5F5E5A"];return{fontSize:11,fontWeight:500,padding:"2px 8px",borderRadius:20,background:bg,color:co,display:"inline-block"};},
+  btn:(v="d")=>({padding:"7px 14px",borderRadius:6,border:v==="p"?"none":"0.5px solid var(--color-border-secondary)",background:v==="p"?BRAND:"transparent",color:v==="p"?"#fff":"var(--color-text-secondary)",fontSize:13,cursor:"pointer",fontFamily:"inherit"}),
+  inp:{padding:"7px 10px",borderRadius:6,border:"0.5px solid var(--color-border-secondary)",fontSize:13,background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontFamily:"inherit",width:"100%",boxSizing:"border-box"},
+  sel:{padding:"7px 10px",borderRadius:6,border:"0.5px solid var(--color-border-secondary)",fontSize:13,background:"var(--color-background-primary)",color:"var(--color-text-primary)",fontFamily:"inherit",width:"100%",boxSizing:"border-box"},
+  lbl:{fontSize:12,color:"var(--color-text-secondary)",marginBottom:4,display:"block"},
+  row:{display:"flex",alignItems:"center",gap:8},
+  modal:{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.65)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99999},
+  mbox:{background:"#fff",borderRadius:12,border:"1px solid #ddd",padding:28,width:540,maxWidth:"94vw",maxHeight:"90vh",overflow:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",color:"#111"},
+  iI:{padding:"3px 6px",borderRadius:4,border:"1px solid "+BRAND,fontSize:13,background:"#fff",color:"#111",fontFamily:"inherit",width:"100%",boxSizing:"border-box",outline:"none"},
+  iS:{padding:"3px 6px",borderRadius:4,border:"1px solid "+BRAND,fontSize:12,background:"#fff",color:"#111",fontFamily:"inherit",cursor:"pointer",outline:"none"},
+};
+
+function Met({label,value,sub,color}){
+  return <div style={S.mc}>
+    <div style={{fontSize:12,color:"var(--color-text-secondary)",marginBottom:4}}>{label}</div>
+    <div style={{fontSize:22,fontWeight:500,color:color||"var(--color-text-primary)"}}>{value}</div>
+    {sub&&<div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{sub}</div>}
+  </div>;
+}
+
+function EC({value,onChange,type="text",opts=null,canEdit=true}){
+  const[editing,setEditing]=useState(false);
+  const[val,setVal]=useState(String(value??""));
+  const ref=useRef();
+  useEffect(()=>setVal(String(value??"")),[value]);
+  useEffect(()=>{if(editing&&ref.current)ref.current.focus();},[editing]);
+  if(!canEdit)return <span style={{fontSize:13}}>{value||"—"}</span>;
+  if(editing){
+    const commit=()=>{setEditing(false);if(val!==String(value??""))onChange(val);};
+    if(opts)return <select ref={ref} style={S.iS} value={val} onChange={e=>setVal(e.target.value)} onBlur={commit} onKeyDown={e=>e.key==="Enter"&&commit()}>{opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}</select>;
+    return <input ref={ref} style={S.iI} type={type} value={val} onChange={e=>setVal(e.target.value)} onBlur={commit} onKeyDown={e=>e.key==="Enter"&&commit()}/>;
+  }
+  return <span onClick={()=>setEditing(true)} style={{cursor:"pointer",borderBottom:"1px dashed var(--color-border-secondary)",paddingBottom:1,fontSize:13}} title="Click to edit">{value||<span style={{color:"var(--color-text-tertiary)"}}>—</span>}</span>;
+}
+
+function Md({text=""}){
+  return <>{text.split("\n").map((l,i)=>{
+    if(l.startsWith("# "))return <h2 key={i} style={{fontSize:16,fontWeight:600,margin:"0 0 10px"}}>{l.slice(2)}</h2>;
+    if(l.startsWith("## "))return <h3 key={i} style={{fontSize:14,fontWeight:500,margin:"14px 0 6px",color:"var(--color-text-secondary)"}}>{l.slice(3)}</h3>;
+    if(l.startsWith("- ")||l.startsWith("• "))return <div key={i} style={{paddingLeft:16,marginBottom:4,fontSize:13}}>• {l.slice(2)}</div>;
+    if(/^\d+\./.test(l))return <div key={i} style={{paddingLeft:16,marginBottom:4,fontSize:13}}>{l}</div>;
+    if(!l)return <div key={i} style={{height:8}}/>;
+    return <div key={i} style={{fontSize:13,marginBottom:4,lineHeight:1.65}}>{l}</div>;
+  })}</>;
+}
+
+const embedUrl=u=>{if(!u)return null;if(u.includes("youtu.be/"))return`https://www.youtube.com/embed/${u.split("youtu.be/")[1]?.split("?")[0]}`;if(u.includes("youtube.com/watch")){try{return`https://www.youtube.com/embed/${new URL(u).searchParams.get("v")}`;}catch{return null;}}if(u.includes("vimeo.com/"))return`https://player.vimeo.com/video/${u.split("vimeo.com/")[1]?.split("?")[0]}`;return null;};
+
+// ── Nav config ────────────────────────────────────────────────────────────────
+const NAV=[
+  {id:"overview",l:"Overview",i:"⊞",s:"cd"},
+  {id:"clients",l:"Client Delivery",i:"◈",s:"cd"},
+  {id:"meetings",l:"Meetings",i:"◷",s:"cd"},
+  {id:"commissions",l:"Team Commissions",i:"£",s:"cd"},
+  {id:"clientcommissions",l:"Client Commissions",i:"◈",s:"cd",adminOnly:true},
+  {id:"masterdata",l:"Master Data",i:"◉",s:"cd"},
+  {id:"teamcalendar",l:"Team Calendar",i:"⊟",s:"ts"},
+  {id:"mondaymeeting",l:"Monday Meeting",i:"☑",s:"ts"},
+  {id:"training",l:"Training",i:"▷",s:"ts"},
+  {id:"leave",l:"Leave",i:"✦",s:"ts"},
+  {id:"documents",l:"Documents",i:"◻",s:"ts"},
+  {id:"calendar",l:"Content Calendar",i:"⊡",s:"mh"},
+  {id:"performance",l:"Post Performance",i:"↗",s:"mh"},
+  {id:"ideas",l:"Ideas Bank",i:"✧",s:"mh"},
+  {id:"aidraft",l:"AI Draft",i:"✦",s:"mh"},
+];
+
+// ── ICS export helper ─────────────────────────────────────────────────────────
+function icsDate(dateStr,hour=10){
+  const d=new Date(dateStr+"T"+String(hour).padStart(2,"0")+":00:00");
+  return d.toISOString().replace(/[-:]/g,"").replace(/\.\d{3}/,"");
+}
+function downloadICS(events){
+  const lines=["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Momentum HQ//EN","CALSCALE:GREGORIAN"];
+  for(const ev of events){
+    lines.push("BEGIN:VEVENT");
+    lines.push(`UID:${ev.id}@momentumhq`);
+    lines.push(`DTSTART:${icsDate(ev.date,10)}`);
+    lines.push(`DTEND:${icsDate(ev.date,ev.endHour||11)}`);
+    lines.push(`SUMMARY:${ev.title}`);
+    if(ev.notes)lines.push(`DESCRIPTION:${ev.notes.replace(/\n/g,"\\n")}`);
+    lines.push("END:VEVENT");
+  }
+  lines.push("END:VCALENDAR");
+  const blob=new Blob([lines.join("\r\n")],{type:"text/calendar"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");a.href=url;a.download="momentum-events.ics";
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+}
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+function Login({onLogin}){
+  const[email,setEmail]=useState("");const[pw,setPw]=useState("");const[err,setErr]=useState("");
+  const go=()=>{const u=USERS.find(u=>u.email===email&&u.password===pw);if(u)onLogin(u);else setErr("Incorrect email or password.");};
+  return <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"var(--color-background-tertiary)"}}>
+    <div style={{...S.card,width:360,margin:0,padding:32}}>
+      <div style={S.lm}>m</div>
+      <div style={{fontSize:20,fontWeight:500,marginBottom:4}}>Momentum HQ</div>
+      <div style={{fontSize:13,color:"var(--color-text-tertiary)",marginBottom:24}}>Sign in to your portal</div>
+      <div style={{marginBottom:12}}><label style={S.lbl}>Email</label><input style={S.inp} type="email" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()} placeholder="you@momentumsales.co.uk"/></div>
+      <div style={{marginBottom:12}}><label style={S.lbl}>Password</label><input style={S.inp} type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&go()} placeholder="••••••••"/></div>
+      {err&&<div style={{fontSize:12,color:"#A32D2D",marginBottom:12}}>{err}</div>}
+      <button style={{...S.btn("p"),width:"100%",padding:"9px 14px"}} onClick={go}>Sign in</button>
+    </div>
+  </div>;
+}
+
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+function Sidebar({user,active,onNav,onLogout,onExport,onImport}){
+  const fileRef=useRef();
+  return <div style={S.sb}>
+    <div style={S.sbh}><div style={S.lm}>m</div><div style={{fontSize:15,fontWeight:500}}>Momentum HQ</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>Internal platform</div></div>
+    <nav style={S.nav}>
+      <div style={S.ns}>Client Delivery</div>
+      {NAV.filter(n=>n.s==="cd"&&(!n.adminOnly||(user.role==="admin"||user.role==="ops"))).map(n=><button key={n.id} style={S.ni(active===n.id)} onClick={()=>onNav(n.id)}><span style={{fontSize:11}}>{n.i}</span>{n.l}</button>)}
+      <div style={S.ns}>Team Space</div>
+      {NAV.filter(n=>n.s==="ts").map(n=><button key={n.id} style={S.ni(active===n.id)} onClick={()=>onNav(n.id)}><span style={{fontSize:11}}>{n.i}</span>{n.l}</button>)}
+      <div style={S.ns}>Marketing Hub</div>
+      {NAV.filter(n=>n.s==="mh").map(n=><button key={n.id} style={S.ni(active===n.id)} onClick={()=>onNav(n.id)}><span style={{fontSize:11}}>{n.i}</span>{n.l}</button>)}
+    </nav>
+    <div style={{padding:"8px"}}>
+      <input ref={fileRef} type="file" accept=".json" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=ev=>{try{onImport(JSON.parse(ev.target.result));}catch{alert("Invalid backup.");}};r.readAsText(f);e.target.value="";}}/>
+      <button onClick={onExport} style={{...S.ni(false),fontSize:11,color:"var(--color-text-tertiary)"}}>⬇ Export backup</button>
+      <button onClick={()=>fileRef.current?.click()} style={{...S.ni(false),fontSize:11,color:"var(--color-text-tertiary)"}}>⬆ Restore backup</button>
+    </div>
+    <div style={S.ua}>
+      <div style={{...S.row,justifyContent:"space-between"}}>
+        <div style={S.row}><div style={S.av(user.color)}>{user.ini}</div><div><div style={{fontSize:12,fontWeight:500}}>{user.name}</div><div style={{fontSize:10,color:"var(--color-text-tertiary)",textTransform:"capitalize"}}>{user.role}</div></div></div>
+        <button onClick={onLogout} style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-text-tertiary)",fontSize:14,padding:4}}>⇥</button>
+      </div>
+    </div>
+  </div>;
+}
+
+// ── KPI Banner ────────────────────────────────────────────────────────────────
+function KpiBanner({stats,closedWonValue}){
+  const r=stats.contactsWorked>0&&stats.mb>0?Math.round(stats.contactsWorked/stats.mb):null;
+  const attRate=stats.mb>0?Math.round(stats.ma/stats.mb*100):null;
+  const pipe=stats.pipelineValue||0;const cwv=closedWonValue||0;
+  const conv=pipe>0&&cwv>0?Math.round(cwv/pipe*100):null;
+  return <div style={{background:`linear-gradient(135deg,${BRAND}18,${BRAND}05)`,border:`1px solid ${BRAND}30`,borderRadius:10,padding:"14px 20px",marginBottom:16,display:"flex",gap:24,flexWrap:"wrap",alignItems:"center"}}>
+    <div style={{minWidth:160}}>
+      <div style={{fontSize:11,fontWeight:600,color:BRAND,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:2}}>Contacts → Meeting Rate</div>
+      <div style={{fontSize:24,fontWeight:700}}>{r?`1 : ${r}`:"—"}</div>
+      <div style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{r?`${r} contacts per booking`:"No data yet"}</div>
+    </div>
+    <div style={{width:1,height:40,background:`${BRAND}30`,flexShrink:0}}/>
+    {[["Booked",stats.mb||0],["Attended",stats.ma||0],["Attend %",attRate!==null?attRate+"%":"—"],["Contacts",(stats.contactsWorked||0).toLocaleString()]].map(([l,v])=>
+      <div key={l} style={{textAlign:"center"}}><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:2}}>{l}</div><div style={{fontSize:20,fontWeight:600}}>{v}</div></div>
+    )}
+    <div style={{width:1,height:40,background:`${BRAND}30`,flexShrink:0}}/>
+    <div style={{textAlign:"center"}}><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:2}}>Pipeline built</div><div style={{fontSize:20,fontWeight:600}}>£{pipe.toLocaleString()}</div></div>
+    <div style={{textAlign:"center"}}><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:2}}>Closed won</div><div style={{fontSize:20,fontWeight:600,color:cwv>0?"#0F6E56":"var(--color-text-primary)"}}>£{cwv.toLocaleString()}</div></div>
+    {conv!==null&&<div style={{textAlign:"center"}}><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:2}}>Conversion</div><div style={{fontSize:20,fontWeight:600,color:"#0F6E56"}}>{conv}%</div></div>}
+  </div>;
+}
+
+// ── Monday Meeting ────────────────────────────────────────────────────────────
+function MondayMeeting({user,data,onSave}){
+  const mondays=getUpcomingMondays(12);
+  const today=todayStr();
+  const defaultDate=(()=>{const u=mondays.find(m=>localDateStr(m)>=today);return u?localDateStr(u):localDateStr(mondays[0]);})();
+  const[selectedDate,setSelectedDate]=useState(defaultDate);
+  const[newAction,setNewAction]=useState({owner:"harry",text:"",due:""});
+  // Use local state for the current meeting to avoid Supabase race conditions on every keystroke
+  const meetings=data.mondayMeetings||{};
+  const blankMeeting=()=>({weekContext:"",people:{harry:{prep:"",notes:"",done:false},gen:{prep:"",notes:"",done:false},katie:{prep:"",notes:"",done:false},sumaya:{prep:"",notes:"",done:false}},actions:[]});
+  const[localMM,setLocalMM]=useState(meetings[selectedDate]||blankMeeting());
+  const[lastSaved,setLastSaved]=useState(null);
+  const saveTimerRef=useRef(null);
+
+  // When date changes, load that date's data into local state
+  useEffect(()=>{setLocalMM(meetings[selectedDate]||blankMeeting());},[selectedDate]);
+
+  // Debounced save — waits 800ms after last change before writing to Supabase
+  const schedSave=mm=>{
+    setLocalMM(mm);
+    if(saveTimerRef.current)clearTimeout(saveTimerRef.current);
+    saveTimerRef.current=setTimeout(()=>{
+      onSave({...data,mondayMeetings:{...data.mondayMeetings,[selectedDate]:mm}});
+      setLastSaved(new Date());
+    },800);
+  };
+
+  const mm=localMM;
+  const setPerson=(id,ch)=>schedSave({...mm,people:{...mm.people,[id]:{...mm.people[id],...ch}}});
+  const toggleDone=id=>setPerson(id,{done:!mm.people[id]?.done});
+  const addAction=()=>{if(!newAction.text.trim())return;schedSave({...mm,actions:[...mm.actions,{id:Date.now(),...newAction,done:false}]});setNewAction({owner:"harry",text:"",due:""});};
+  const toggleAction=id=>schedSave({...mm,actions:mm.actions.map(a=>a.id===id?{...a,done:!a.done}:a)});
+  const deleteAction=id=>schedSave({...mm,actions:mm.actions.filter(a=>a.id!==id)});
+
+  const TEAM=[
+    {id:"harry",name:"Harry",color:"#378ADD",ini:"Ha"},
+    {id:"gen",name:"Gen",color:"#D4537E",ini:"G"},
+    {id:"katie",name:"Katie",color:"#8B5CF6",ini:"K"},
+    {id:"sumaya",name:"Sumaya",color:"#059669",ini:"S"},
+  ];
+
+  const covered=TEAM.filter(t=>mm.people[t.id]?.done).length;
+  const pct=Math.round(covered/TEAM.length*100);
+  const openActions=mm.actions.filter(a=>!a.done).length;
+
+  return <div>
+    <div style={{...S.row,justifyContent:"space-between",marginBottom:4}}>
+      <div style={S.pt}>Monday Meeting</div>
+      <div style={S.row}>
+        <select style={{...S.sel,width:"auto"}} value={selectedDate} onChange={e=>setSelectedDate(e.target.value)}>
+          {mondays.map(m=>{const ds=localDateStr(m);return <option key={ds} value={ds}>{fmt(ds)}</option>;})}
+        </select>
+        <button style={{...S.btn(),fontSize:12}} onClick={()=>{if(window.confirm("Reset this week to a blank meeting?"))schedSave(blankMeeting());}}>Reset</button>
+        <button style={{...S.btn(),fontSize:12}} onClick={()=>downloadICS([{id:`monday-${selectedDate}`,title:"Momentum Monday Meeting",date:selectedDate,notes:"Weekly team meeting 10am",endHour:11}])}>Export .ics</button>
+      </div>
+    </div>
+    <div style={{...S.row,justifyContent:"space-between",marginBottom:4}}>
+      <div style={S.ps}>Prep your notes before the call · Go person by person · Capture actions as you go</div>
+      <div style={{fontSize:11,color:lastSaved?"#0F6E56":"var(--color-text-tertiary)",transition:"color 0.3s"}}>{lastSaved?`● Saved ${lastSaved.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"})}`:""}</div>
+    </div>
+
+    {/* Progress bar */}
+    <div style={{...S.card,padding:"14px 20px",marginBottom:16}}>
+      <div style={{...S.row,justifyContent:"space-between",marginBottom:8}}>
+        <div style={S.row}>
+          {TEAM.map(t=>{
+            const done=mm.people[t.id]?.done;
+            return <div key={t.id} title={t.name} style={{...S.av(done?t.color:"#ccc"),width:28,height:28,fontSize:11,fontWeight:600,opacity:done?1:0.4,transition:"all 0.2s"}}>{t.ini}</div>;
+          })}
+          <span style={{fontSize:13,color:"var(--color-text-secondary)",marginLeft:4}}>{covered}/{TEAM.length} covered</span>
+        </div>
+        <div style={S.row}>
+          {openActions>0&&<span style={{fontSize:12,color:"#854F0B",fontWeight:500,background:"#FAEEDA",padding:"2px 10px",borderRadius:12}}>{openActions} open action{openActions!==1?"s":""}</span>}
+          <span style={{fontSize:14,fontWeight:600,color:pct===100?"#0F6E56":BRAND}}>{pct}%</span>
+        </div>
+      </div>
+      <div style={{height:5,background:"var(--color-border-tertiary)",borderRadius:3,overflow:"hidden"}}>
+        <div style={{height:"100%",width:pct+"%",background:pct===100?"#0F6E56":BRAND,borderRadius:3,transition:"width 0.3s"}}/>
+      </div>
+    </div>
+
+    {/* Week context */}
+    <div style={{...S.card,marginBottom:12}}>
+      <label style={{fontSize:12,fontWeight:500,color:"var(--color-text-secondary)",marginBottom:6,display:"block"}}>Week context / anything to flag before you start</label>
+      <textarea value={mm.weekContext||""} onChange={e=>schedSave({...mm,weekContext:e.target.value})} placeholder="e.g. Harry is on annual leave Thursday. GRID contract expected this week. Mongoose GP assignment needs confirming." style={{...S.inp,height:60,resize:"vertical",fontSize:13,lineHeight:1.6}}/>
+    </div>
+
+    {/* Per-person sections */}
+    {TEAM.map(t=>{
+      const p=mm.people[t.id]||{prep:"",notes:"",done:false};
+      return <div key={t.id} style={{...S.card,marginBottom:12,border:p.done?`1.5px solid ${t.color}40`:"0.5px solid var(--color-border-tertiary)",transition:"border 0.2s"}}>
+        <div style={{...S.row,justifyContent:"space-between",marginBottom:14}}>
+          <div style={S.row}>
+            <div style={{...S.av(t.color),width:32,height:32,fontSize:13,fontWeight:600}}>{t.ini}</div>
+            <span style={{fontSize:16,fontWeight:600}}>{t.name}</span>
+          </div>
+          <button onClick={()=>toggleDone(t.id)} style={{...S.btn(p.done?"p":"d"),fontSize:12,padding:"5px 14px",background:p.done?t.color:"transparent",border:p.done?"none":`1.5px solid ${t.color}`,color:p.done?"#fff":t.color,borderRadius:20,fontWeight:500}}>
+            {p.done?"✓ Covered":"Mark covered"}
+          </button>
+        </div>
+
+        <div style={S.g(2)}>
+          <div>
+            <label style={{fontSize:11,fontWeight:600,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6,display:"block"}}>📋 Prep — before the call</label>
+            <textarea
+              value={p.prep||""}
+              onChange={e=>setPerson(t.id,{prep:e.target.value})}
+              placeholder={`Things to raise with ${t.name}…\n\nExamples:\n- Pipeline update on JGW\n- How are they finding Katie's onboarding?\n- Any blockers this week?`}
+              style={{...S.inp,height:120,resize:"vertical",fontSize:13,lineHeight:1.6,background:p.done?"var(--color-background-secondary)":BL,border:`0.5px solid ${BRAND}30`}}
+            />
+          </div>
+          <div>
+            <label style={{fontSize:11,fontWeight:600,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6,display:"block"}}>📝 Live notes — during the call</label>
+            <textarea
+              value={p.notes||""}
+              onChange={e=>setPerson(t.id,{notes:e.target.value})}
+              placeholder={`Notes from ${t.name}'s slot…`}
+              style={{...S.inp,height:120,resize:"vertical",fontSize:13,lineHeight:1.6}}
+            />
+          </div>
+        </div>
+      </div>;
+    })}
+
+    {/* Actions */}
+    <div style={S.card}>
+      <div style={{fontSize:15,fontWeight:600,marginBottom:4}}>Actions</div>
+      <div style={{fontSize:12,color:"var(--color-text-tertiary)",marginBottom:16}}>Log actions as you go — owner, what, and when by</div>
+
+      {/* Add action */}
+      <div style={{...S.row,marginBottom:16,flexWrap:"wrap",gap:8,padding:"12px 14px",background:"var(--color-background-secondary)",borderRadius:8}}>
+        <select style={{...S.sel,width:100,flex:"0 0 auto"}} value={newAction.owner} onChange={e=>setNewAction({...newAction,owner:e.target.value})}>
+          {TEAM.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+          <option value="hannah">Hannah</option>
+        </select>
+        <input
+          style={{...S.inp,flex:1,minWidth:180}}
+          placeholder="What needs to happen…"
+          value={newAction.text}
+          onChange={e=>setNewAction({...newAction,text:e.target.value})}
+          onKeyDown={e=>e.key==="Enter"&&addAction()}
+        />
+        <input
+          style={{...S.inp,width:140,flex:"0 0 auto"}}
+          type="date"
+          value={newAction.due}
+          onChange={e=>setNewAction({...newAction,due:e.target.value})}
+        />
+        <button style={{...S.btn("p"),padding:"7px 16px",flex:"0 0 auto"}} onClick={addAction}>+ Add</button>
+      </div>
+
+      {/* Actions list */}
+      {mm.actions.length===0&&<div style={{fontSize:12,color:"var(--color-text-tertiary)",padding:"8px 0"}}>No actions yet — add them above as you go through the call.</div>}
+      {mm.actions.length>0&&<>
+        {mm.actions.filter(a=>!a.done).length>0&&<div style={{marginBottom:8}}>
+          {mm.actions.filter(a=>!a.done).map(a=>{
+            const t=TEAM.find(x=>x.id===a.owner)||{color:"#888",ini:"?",name:a.owner};
+            return <div key={a.id} style={{...S.row,justifyContent:"space-between",padding:"10px 0",borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+              <div style={{...S.row,flex:1,gap:10}}>
+                <input type="checkbox" checked={false} onChange={()=>toggleAction(a.id)} style={{accentColor:t.color,width:16,height:16,flexShrink:0,cursor:"pointer"}}/>
+                <div style={{...S.av(t.color),width:24,height:24,fontSize:10,flexShrink:0}}>{t.ini}</div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:500}}>{a.text}</div>
+                  {a.due&&<div style={{fontSize:11,color:(a.due<today)?"#A32D2D":"var(--color-text-tertiary)",marginTop:2}}>Due {fmt(a.due)}{a.due<today?" — overdue":""}</div>}
+                </div>
+              </div>
+              <button onClick={()=>deleteAction(a.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-text-tertiary)",fontSize:16,padding:"0 4px"}}>×</button>
+            </div>;
+          })}
+        </div>}
+        {mm.actions.filter(a=>a.done).length>0&&<div>
+          <div style={{fontSize:11,color:"var(--color-text-tertiary)",fontWeight:500,textTransform:"uppercase",letterSpacing:"0.05em",margin:"12px 0 6px"}}>Done</div>
+          {mm.actions.filter(a=>a.done).map(a=>{
+            const t=TEAM.find(x=>x.id===a.owner)||{color:"#888",ini:"?",name:a.owner};
+            return <div key={a.id} style={{...S.row,justifyContent:"space-between",padding:"8px 0",borderBottom:"0.5px solid var(--color-border-tertiary)",opacity:0.5}}>
+              <div style={{...S.row,flex:1,gap:10}}>
+                <input type="checkbox" checked={true} onChange={()=>toggleAction(a.id)} style={{accentColor:t.color,width:16,height:16,flexShrink:0,cursor:"pointer"}}/>
+                <div style={{...S.av(t.color),width:24,height:24,fontSize:10,flexShrink:0}}>{t.ini}</div>
+                <div style={{fontSize:13,textDecoration:"line-through",color:"var(--color-text-tertiary)"}}>{a.text}</div>
+              </div>
+              <button onClick={()=>deleteAction(a.id)} style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-text-tertiary)",fontSize:16,padding:"0 4px"}}>×</button>
+            </div>;
+          })}
+        </div>}
+      </>}
+    </div>
+  </div>;
+}
+
+
+// ── Team Calendar ─────────────────────────────────────────────────────────────
+const EVT_COLORS={
+  meeting:{bg:BRAND,light:BL,label:"Client meeting"},
+  internal:{bg:"#378ADD",light:"#EAF3FB",label:"Internal"},
+  deadline:{bg:"#A32D2D",light:"#FCEBEB",label:"Deadline"},
+  onboarding:{bg:"#8B5CF6",light:"#F0EBFE",label:"Onboarding"},
+  monday:{bg:"#0F6E56",light:"#E1F5EE",label:"Monday meeting"},
+  rhythm:{bg:"#854F0B",light:"#FAEEDA",label:"Team rhythm"},
+};
+
+function TeamCalendar({user,data,onSave}){
+  const today=new Date();
+  const[yr,setYr]=useState(today.getFullYear());
+  const[mo,setMo]=useState(today.getMonth());
+  const[selEvt,setSelEvt]=useState(null);
+  const[showAdd,setShowAdd]=useState(false);
+  const[showRhythm,setShowRhythm]=useState(false);
+  const[editNotes,setEditNotes]=useState("");
+  const[editingNotes,setEditingNotes]=useState(false);
+  const[dragId,setDragId]=useState(null);
+  const[form,setForm]=useState({title:"",date:"",type:"internal",notes:""});
+  const[rhythmForm,setRhythmForm]=useState({type:"monthly",employee:"harry",startDate:"",duration:30});
+
+  const mondays=getUpcomingMondays(52);
+  const mondaySet=new Set(mondays.map(m=>localDateStr(m)));
+  const events=data.calendarEvents||[];
+  const saveEvts=evts=>onSave({...data,calendarEvents:evts});
+
+  const dim=new Date(yr,mo+1,0).getDate();
+  const first=(new Date(yr,mo,1).getDay()+6)%7;
+  const cells=Math.ceil((first+dim)/7)*7;
+
+  const evtsOn=d=>{
+    const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    const reg=events.filter(e=>e.date===ds);
+    if(mondaySet.has(ds))return[{id:`monday-${ds}`,title:"Monday Meeting · 10am",date:ds,type:"monday",notes:"",isMondayMeeting:true},...reg];
+    return reg;
+  };
+
+  const upcoming=[
+    ...mondays.filter(m=>localDateStr(m)>=localDateStr(today)).slice(0,3).map(m=>({id:`monday-${localDateStr(m)}`,title:"Monday Meeting · 10am",date:localDateStr(m),type:"monday",notes:"",isMondayMeeting:true})),
+    ...events.filter(e=>e.date>=localDateStr(today))
+  ].sort((a,b)=>a.date>b.date?1:-1).slice(0,10);
+
+  const generateRhythm=()=>{
+    if(!rhythmForm.startDate)return;
+    const emp=getUser(rhythmForm.employee);
+    const newEvts=[];
+    const start=new Date(rhythmForm.startDate+"T12:00:00");
+    const count=rhythmForm.type==="monthly"?12:4;
+    for(let i=0;i<count;i++){
+      const d=new Date(start);
+      if(rhythmForm.type==="monthly")d.setMonth(d.getMonth()+i);
+      else d.setMonth(d.getMonth()+i*3);
+      const label=rhythmForm.type==="monthly"?"Monthly 1-1":"Quarterly Review";
+      const dur=rhythmForm.type==="monthly"?30:60;
+      newEvts.push({id:Date.now()+i,title:`Hannah / ${emp?.name} — ${label}`,date:localDateStr(d),type:"rhythm",notes:`${dur} mins · ${rhythmForm.type==="monthly"?"Monthly check-in — pipeline, blockers, commission":"Quarterly review — performance, goals, development"}`,createdBy:"hannah"});
+    }
+    saveEvts([...newEvts,...events]);
+    setShowRhythm(false);
+  };
+
+  const exportVisible=()=>{
+    const month=`${yr}-${String(mo+1).padStart(2,"0")}`;
+    const toExport=[
+      ...mondays.filter(m=>localDateStr(m).startsWith(month)).map(m=>({id:`monday-${localDateStr(m)}`,title:"Momentum Monday Meeting",date:localDateStr(m),notes:"Weekly team meeting 10am",endHour:11})),
+      ...events.filter(e=>e.date.startsWith(month)).map(e=>({...e,endHour:e.type==="rhythm"?11:11}))
+    ];
+    downloadICS(toExport);
+  };
+
+  const mName=new Date(yr,mo,1).toLocaleDateString("en-GB",{month:"long",year:"numeric"});
+
+  return <div>
+    <div style={{...S.row,justifyContent:"space-between",marginBottom:4}}>
+      <div style={S.pt}>Team Calendar</div>
+      <div style={S.row}>
+        <button style={{...S.btn(),padding:"6px 10px"}} onClick={()=>{if(mo===0){setMo(11);setYr(y=>y-1);}else setMo(m=>m-1);}}>←</button>
+        <span style={{fontSize:14,fontWeight:500,minWidth:160,textAlign:"center"}}>{mName}</span>
+        <button style={{...S.btn(),padding:"6px 10px"}} onClick={()=>{if(mo===11){setMo(0);setYr(y=>y+1);}else setMo(m=>m+1);}}>→</button>
+        <button style={{...S.btn(),fontSize:12}} onClick={()=>setShowRhythm(true)}>+ Add rhythm</button>
+        <button style={{...S.btn(),fontSize:12}} onClick={exportVisible}>Export month .ics</button>
+        <button style={S.btn("p")} onClick={()=>setShowAdd(true)}>+ Add event</button>
+      </div>
+    </div>
+    <div style={S.ps}>Monday meetings auto-appear · "Export month .ics" imports into Google Calendar · Drag events to reschedule</div>
+    <div style={{...S.row,marginBottom:16,flexWrap:"wrap",gap:8}}>
+      {Object.entries(EVT_COLORS).map(([t,{bg,label}])=><div key={t} style={S.row}><div style={{width:10,height:10,borderRadius:"50%",background:bg}}/><span style={{fontSize:11,color:"var(--color-text-secondary)"}}>{label}</span></div>)}
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 260px",gap:16}}>
+      <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:12,overflow:"hidden"}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+          {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=><div key={d} style={{padding:"8px 0",textAlign:"center",fontSize:11,fontWeight:600,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em"}}>{d}</div>)}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+          {Array.from({length:cells},(_,i)=>{
+            const dn=i-first+1;const valid=dn>=1&&dn<=dim;
+            const ds=valid?`${yr}-${String(mo+1).padStart(2,"0")}-${String(dn).padStart(2,"0")}`:"";
+            const isToday=valid&&dn===today.getDate()&&mo===today.getMonth()&&yr===today.getFullYear();
+            const dayEvts=valid?evtsOn(dn):[];const isWknd=(i%7)>=5;
+            return <div key={i} style={{minHeight:90,borderRight:"0.5px solid var(--color-border-tertiary)",borderBottom:"0.5px solid var(--color-border-tertiary)",padding:4,background:valid?(isWknd?"var(--color-background-secondary)":"var(--color-background-primary)"):"var(--color-background-tertiary)"}} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(dragId&&valid&&!String(dragId).startsWith("monday"))saveEvts(events.map(ev=>ev.id===dragId?{...ev,date:ds}:ev));setDragId(null);}}>
+              {valid&&<div style={{fontSize:12,fontWeight:isToday?700:400,color:isToday?"#fff":"var(--color-text-secondary)",marginBottom:2,width:22,height:22,borderRadius:"50%",background:isToday?BRAND:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>{dn}</div>}
+              {dayEvts.slice(0,3).map(evt=>{const col=EVT_COLORS[evt.type]||EVT_COLORS.internal;return <div key={evt.id} draggable={!evt.isMondayMeeting} onDragStart={()=>!evt.isMondayMeeting&&setDragId(evt.id)} onClick={()=>{setSelEvt(evt);setEditNotes(evt.notes||"");setEditingNotes(false);}} style={{fontSize:10,padding:"2px 5px",borderRadius:4,background:col.light,color:col.bg,fontWeight:500,marginBottom:2,cursor:"pointer",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",borderLeft:`3px solid ${col.bg}`,lineHeight:1.4}}>{evt.title}</div>;})}
+              {dayEvts.length>3&&<div style={{fontSize:10,color:"var(--color-text-tertiary)",paddingLeft:4}}>+{dayEvts.length-3} more</div>}
+            </div>;
+          })}
+        </div>
+      </div>
+      <div style={{...S.card,marginBottom:0}}>
+        <div style={S.ct}>Coming up</div>
+        {upcoming.map(evt=>{const col=EVT_COLORS[evt.type]||EVT_COLORS.internal;return <div key={evt.id} onClick={()=>{setSelEvt(evt);setEditNotes(evt.notes||"");setEditingNotes(false);}} style={{padding:"8px 0",borderBottom:"0.5px solid var(--color-border-tertiary)",cursor:"pointer"}}><div style={{...S.row,gap:6,marginBottom:2}}><div style={{width:8,height:8,borderRadius:"50%",background:col.bg,flexShrink:0,marginTop:2}}/><div style={{fontSize:12,fontWeight:500,lineHeight:1.4,flex:1}}>{evt.title}</div></div><div style={{fontSize:11,color:"var(--color-text-tertiary)",paddingLeft:14}}>{fmt(evt.date)}</div></div>;})}
+      </div>
+    </div>
+
+    {/* Event detail modal */}
+    {selEvt&&(()=>{
+      const col=EVT_COLORS[selEvt.type]||EVT_COLORS.internal;
+      if(selEvt.isMondayMeeting)return <div style={S.modal} onClick={e=>e.target===e.currentTarget&&setSelEvt(null)}>
+        <div style={S.mbox}>
+          <div style={{...S.row,justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:13,fontWeight:600,color:col.bg}}>Monday Meeting</span><button onClick={()=>setSelEvt(null)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:"#888"}}>×</button></div>
+          <div style={{fontSize:16,fontWeight:600,marginBottom:4}}>Monday Meeting · 10am</div>
+          <div style={{fontSize:13,color:"#888",marginBottom:16}}>{fmt(selEvt.date)}</div>
+          <p style={{fontSize:13,color:"#555",lineHeight:1.6,marginBottom:16}}>Open the Monday Meeting tab to view and fill in the agenda.</p>
+          <div style={{...S.row,gap:8,justifyContent:"flex-end"}}>
+            <button style={{...S.btn(),fontSize:12}} onClick={()=>downloadICS([{id:selEvt.id,title:"Momentum Monday Meeting",date:selEvt.date,notes:"Weekly team meeting 10am",endHour:11}])}>Export .ics</button>
+            <button style={S.btn("p")} onClick={()=>setSelEvt(null)}>Close</button>
+          </div>
+        </div>
+      </div>;
+      return <div style={S.modal} onClick={e=>e.target===e.currentTarget&&setSelEvt(null)}>
+        <div style={S.mbox}>
+          <div style={{...S.row,justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:11,fontWeight:600,color:col.bg,textTransform:"uppercase",letterSpacing:"0.05em"}}>{col.label}</span><button onClick={()=>setSelEvt(null)} style={{background:"none",border:"none",cursor:"pointer",fontSize:18,color:"#888"}}>×</button></div>
+          <div style={{fontSize:17,fontWeight:600,color:"#111",marginBottom:4}}>{selEvt.title}</div>
+          <div style={{fontSize:13,color:"#888",marginBottom:16}}>{fmt(selEvt.date)}</div>
+          <div style={{marginBottom:16}}>
+            <div style={{...S.row,justifyContent:"space-between",marginBottom:6}}><label style={{fontSize:12,fontWeight:500,color:"#555"}}>Notes</label>{!editingNotes&&<button style={{...S.btn(),fontSize:11,padding:"2px 8px"}} onClick={()=>setEditingNotes(true)}>Edit</button>}</div>
+            {editingNotes?<><textarea style={{...minp(),height:100,resize:"vertical",marginBottom:8}} value={editNotes} onChange={e=>setEditNotes(e.target.value)}/><div style={{...S.row,justifyContent:"flex-end",gap:8}}><button style={S.btn()} onClick={()=>setEditingNotes(false)}>Cancel</button><button style={S.btn("p")} onClick={()=>{saveEvts(events.map(ev=>ev.id===selEvt.id?{...ev,notes:editNotes}:ev));setSelEvt({...selEvt,notes:editNotes});setEditingNotes(false);}}>Save</button></div></>
+            :<div style={{fontSize:13,color:"#333",lineHeight:1.6,minHeight:40,padding:"8px 10px",background:"#f9f9f9",borderRadius:6}}>{selEvt.notes||<span style={{color:"#aaa"}}>No notes.</span>}</div>}
+          </div>
+          <div style={{...S.row,justifyContent:"space-between"}}>
+            <button style={{...S.btn(),fontSize:12,color:"#A32D2D"}} onClick={()=>{saveEvts(events.filter(ev=>ev.id!==selEvt.id));setSelEvt(null);}}>Delete</button>
+            <div style={{...S.row,gap:8}}>
+              <button style={{...S.btn(),fontSize:12}} onClick={()=>downloadICS([{...selEvt,endHour:selEvt.type==="rhythm"?11:11}])}>Export .ics</button>
+              <label style={{fontSize:12,color:"#888"}}>Move to:</label>
+              <input type="date" style={{...minp(),width:"auto",fontSize:12}} defaultValue={selEvt.date} onBlur={e=>{if(e.target.value&&e.target.value!==selEvt.date){saveEvts(events.map(ev=>ev.id===selEvt.id?{...ev,date:e.target.value}:ev));setSelEvt({...selEvt,date:e.target.value});}}}/>
+            </div>
+          </div>
+        </div>
+      </div>;
+    })()}
+
+    {/* Add event */}
+    {showAdd&&<div style={S.modal} onClick={e=>e.target===e.currentTarget&&setShowAdd(false)}>
+      <div style={S.mbox}>
+        <div style={{fontSize:15,fontWeight:600,marginBottom:16,color:"#111"}}>Add event</div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Title</label><input style={minp()} value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Date</label><input style={minp()} type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Type</label><select style={msel()} value={form.type} onChange={e=>setForm({...form,type:e.target.value})}>{Object.entries(EVT_COLORS).filter(([t])=>t!=="monday").map(([t,{label}])=><option key={t} value={t}>{label}</option>)}</select></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Notes</label><textarea style={{...minp(),height:80,resize:"vertical"}} value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})}/></div>
+        <div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:20}}><button style={S.btn()} onClick={()=>setShowAdd(false)}>Cancel</button><button style={S.btn("p")} onClick={()=>{if(!form.title||!form.date)return;saveEvts([{...form,id:Date.now(),createdBy:user.id},...events]);setShowAdd(false);setForm({title:"",date:"",type:"internal",notes:""});}}>Add</button></div>
+      </div>
+    </div>}
+
+    {/* Add rhythm */}
+    {showRhythm&&<div style={S.modal} onClick={e=>e.target===e.currentTarget&&setShowRhythm(false)}>
+      <div style={S.mbox}>
+        <div style={{fontSize:15,fontWeight:600,marginBottom:4,color:"#111"}}>Add recurring team rhythm</div>
+        <div style={{fontSize:12,color:"#888",marginBottom:16}}>Generates events automatically. Export as .ics to add to Google Calendar.</div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Type</label><select style={msel()} value={rhythmForm.type} onChange={e=>setRhythmForm({...rhythmForm,type:e.target.value})}><option value="monthly">Monthly 1-1 (30 mins · 12 months)</option><option value="quarterly">Quarterly review (1 hour · 4 quarters)</option></select></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Team member</label><select style={msel()} value={rhythmForm.employee} onChange={e=>setRhythmForm({...rhythmForm,employee:e.target.value})}>{USERS.filter(u=>u.role!=="admin").map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>First meeting date</label><input style={minp()} type="date" value={rhythmForm.startDate} onChange={e=>setRhythmForm({...rhythmForm,startDate:e.target.value})}/></div>
+        <div style={{padding:"10px 14px",background:"#E1F5EE",borderRadius:8,marginBottom:16,fontSize:12,color:"#0F6E56"}}>
+          This will create {rhythmForm.type==="monthly"?12:4} events on the team calendar. Export them as .ics to share with {getUser(rhythmForm.employee)?.name} and add to Google Calendar.
+        </div>
+        <div style={{...S.row,justifyContent:"flex-end",gap:8}}><button style={S.btn()} onClick={()=>setShowRhythm(false)}>Cancel</button><button style={S.btn("p")} onClick={generateRhythm}>Generate events</button></div>
+      </div>
+    </div>}
+  </div>;
+}
+// ── Overview ──────────────────────────────────────────────────────────────────
+function Overview({user,data,onNav}){
+  const adm=user.role==="admin";
+  const mtgs=adm?data.meetings:data.meetings.filter(m=>m.sp===user.id);
+  const cms=adm?data.commissions:data.commissions.filter(x=>x.sp===user.id);
+  const totalPipeline=(data.clients||[]).reduce((a,cl)=>a+(getAggStats(cl.history||[],"all").pipelineValue||0),0);
+  const totalClosed=(data.clients||[]).reduce((a,cl)=>a+(cl.closedWonValue||0),0);
+  const mondays=getUpcomingMondays(1);const nextMondayStr=localDateStr(mondays[0]);
+  const mm=data.mondayMeetings||{};const nextMM=mm[nextMondayStr];
+  return <div>
+    <div style={S.pt}>Overview</div>
+    <div style={S.ps}>{adm?"Team performance at a glance":`Welcome back, ${user.name}`}</div>
+    <div style={adm?S.g(5):S.g(4)}>
+      <Met label="Meetings attended" value={mtgs.filter(m=>m.status==="attended").length}/>
+      <Met label="Meetings booked" value={mtgs.filter(m=>m.status==="booked").length}/>
+      <Met label="Pending commission" value={`£${cms.filter(x=>x.status==="pending").reduce((a,b)=>a+b.amount,0).toLocaleString()}`}/>
+      {adm?<><Met label="Total pipeline" value={`£${totalPipeline.toLocaleString()}`} color={BRAND}/><Met label="Total closed won" value={`£${totalClosed.toLocaleString()}`} color="#0F6E56"/></>:<Met label="Paid commission" value={`£${cms.filter(x=>x.status==="paid").reduce((a,b)=>a+b.amount,0).toLocaleString()}`}/>}
+    </div>
+    {adm&&<div onClick={()=>onNav("mondaymeeting")} style={{...S.card,cursor:"pointer",borderColor:BRAND+"40",background:`linear-gradient(135deg,${BRAND}08,transparent)`,marginBottom:16}}>
+      <div style={{...S.row,justifyContent:"space-between"}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:600,color:BRAND,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Next Monday Meeting · {fmt(nextMondayStr)}</div>
+          {nextMM?(()=>{
+            const team=["harry","gen","katie","sumaya"];
+            const covered=team.filter(id=>nextMM.people?.[id]?.done).length;
+            const openActions=(nextMM.actions||[]).filter(a=>!a.done).length;
+            return <div style={{fontSize:14,fontWeight:500}}>{covered}/{team.length} people covered{openActions>0?` · ${openActions} open action${openActions!==1?"s":""}`:" · No open actions"}</div>;
+          })()
+          :<div style={{fontSize:14,fontWeight:500}}>Prep not started — click to add notes</div>}
+        </div>
+        <span style={{fontSize:20,color:BRAND}}>→</span>
+      </div>
+    </div>}
+    <div style={S.card}>
+      <div style={S.ct}>Recent meetings</div>
+      <table style={S.tbl}><thead><tr><th style={S.th}>Client</th><th style={S.th}>Booked with</th>{adm&&<th style={S.th}>Rep</th>}<th style={S.th}>Date</th><th style={S.th}>Status</th></tr></thead>
+      <tbody>{[...mtgs].sort((a,b)=>new Date(b.booked)-new Date(a.booked)).slice(0,6).map(m=>{const u=getUser(m.sp);return <tr key={m.id}><td style={S.td}>{m.client}</td><td style={{...S.td,color:"var(--color-text-secondary)"}}>{m.contact||"—"}</td>{adm&&<td style={S.td}><div style={S.row}><div style={{...S.av(u?.color||"#888"),width:20,height:20,fontSize:9}}>{u?.ini}</div>{u?.name}</div></td>}<td style={S.td}>{fmt(m.booked)}</td><td style={S.td}><span style={S.bdg(m.status)}>{m.status}</span></td></tr>;})}</tbody>
+      </table>
+    </div>
+  </div>;
+}
+
+// ── Master Data ───────────────────────────────────────────────────────────────
+function MasterData({data}){
+  const[period,setPeriod]=useState("month");
+  const active=data.clients.filter(c=>c.status==="active"||c.status==="onboarding");
+  const totals=active.reduce((acc,cl)=>{const st=getAggStats(cl.history,period);for(const k of Object.keys(acc))acc[k]=(acc[k]||0)+(st[k]||0);return acc;},{calls:0,connectedCalls:0,noAnswer:0,contactsWorked:0,mb:0,ma:0,newDeals:0,dealsWon:0,pipelineValue:0,linkedinSent:0,emailsSent:0});
+  const totalClosed=active.reduce((a,cl)=>a+(cl.closedWonValue||0),0);
+  const connRate=totals.calls>0?Math.round(totals.connectedCalls/totals.calls*100):0;
+  const bookRate=totals.contactsWorked>0&&totals.mb>0?Math.round(totals.contactsWorked/totals.mb):null;
+  const attRate=totals.mb>0?Math.round(totals.ma/totals.mb*100):0;
+  const labels={week:"This week",month:"This month",quarter:"This quarter",all:"All time"};
+  return <div>
+    <div style={{...S.row,justifyContent:"space-between",marginBottom:4}}><div style={S.pt}>Master Data</div><div style={S.row}>{["week","month","quarter","all"].map(p=><button key={p} style={{...S.btn(),fontSize:11,padding:"4px 10px",background:period===p?BRAND:"transparent",color:period===p?"#fff":"var(--color-text-secondary)",border:period===p?"none":"0.5px solid var(--color-border-secondary)"}} onClick={()=>setPeriod(p)}>{labels[p]}</button>)}</div></div>
+    <div style={S.ps}>Company-wide rollup · {labels[period]}</div>
+    <div style={{background:`linear-gradient(135deg,${BRAND}18,${BRAND}05)`,border:`1px solid ${BRAND}30`,borderRadius:10,padding:"16px 24px",marginBottom:20,display:"flex",gap:28,flexWrap:"wrap",alignItems:"center"}}>
+      <div style={{minWidth:180}}><div style={{fontSize:11,fontWeight:600,color:BRAND,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:2}}>Contacts → Meeting Rate</div><div style={{fontSize:28,fontWeight:700}}>{bookRate?`1 : ${bookRate}`:"—"}</div></div>
+      {[["Meetings booked",totals.mb],["Meetings attended",totals.ma],["Attendance",attRate+"%"],["Pipeline",`£${totals.pipelineValue.toLocaleString()}`],["Closed won",`£${totalClosed.toLocaleString()}`],["Deals won",totals.dealsWon]].map(([l,v])=>
+        <div key={l} style={{textAlign:"center"}}><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:2}}>{l}</div><div style={{fontSize:22,fontWeight:600}}>{v}</div></div>
+      )}
+    </div>
+    <div style={S.g(4)}><Met label="Total calls" value={totals.calls.toLocaleString()}/><Met label="Connected calls" value={totals.connectedCalls.toLocaleString()} sub={`${connRate}% connect rate`}/><Met label="Contacts worked" value={totals.contactsWorked.toLocaleString()}/><Met label="LinkedIn sent" value={totals.linkedinSent.toLocaleString()}/></div>
+    <div style={S.card}><div style={S.ct}>By client</div>
+      <table style={S.tbl}><thead><tr><th style={S.th}>Client</th><th style={S.th}>Rep</th><th style={S.th}>Calls</th><th style={S.th}>Connected</th><th style={S.th}>Contacts</th><th style={S.th}>Booked</th><th style={S.th}>Attended</th><th style={S.th}>Attend %</th><th style={S.th}>Pipeline</th><th style={S.th}>Closed won</th></tr></thead>
+      <tbody>{active.map(cl=>{const st=getAggStats(cl.history,period);const rep=getUser(cl.gp)||{color:GP_COLOR[cl.gp]||"#888",ini:GP_INI[cl.gp]||"?",name:GP_NAME[cl.gp]||cl.gp};return <tr key={cl.id}><td style={{...S.td,fontWeight:500}}>{cl.name}</td><td style={S.td}><div style={S.row}><div style={{...S.av(rep.color),width:20,height:20,fontSize:9}}>{rep.ini}</div>{rep.name}</div></td><td style={S.td}>{st.calls||0}</td><td style={S.td}>{st.connectedCalls||0}</td><td style={S.td}>{st.contactsWorked||0}</td><td style={S.td}>{st.mb||0}</td><td style={S.td}>{st.ma||0}</td><td style={S.td}><span style={{color:(st.mb>0&&st.ma/st.mb>=0.8)?"#0F6E56":"var(--color-text-secondary)",fontWeight:500}}>{pct(st.ma,st.mb)}</span></td><td style={S.td}>£{(st.pipelineValue||0).toLocaleString()}</td><td style={{...S.td,fontWeight:500,color:(cl.closedWonValue||0)>0?"#0F6E56":"var(--color-text-tertiary)"}}>{(cl.closedWonValue||0)>0?`£${(cl.closedWonValue||0).toLocaleString()}`:"—"}</td></tr>;})}
+      </tbody></table>
+    </div>
+  </div>;
+}
+
+// ── Client Delivery ───────────────────────────────────────────────────────────
+function Clients({user,data,onSave}){
+  const adm=user.role==="admin";const canEdit=adm||user.role==="ops";
+  const[sel,setSel]=useState(null);const[showAdd,setShowAdd]=useState(false);
+  const[showUpdate,setShowUpdate]=useState(false);const[weekForm,setWeekForm]=useState(null);
+  const[weekMode,setWeekMode]=useState("current");
+  const[nAct,setNAct]=useState("");const[nIns,setNIns]=useState("");const[period,setPeriod]=useState("month");
+  const[form,setForm]=useState({name:"",pkg:"Pipeline Builder",gp:"harry",status:"active",notes:""});
+  const[hsLoading,setHsLoading]=useState(false);
+  const[hsError,setHsError]=useState("");
+  const upd=(id,ch)=>{const clients=data.clients.map(x=>x.id===id?{...x,...ch}:x);onSave({...data,clients});if(sel?.id===id)setSel(p=>({...p,...ch}));};
+  const submitWeek=cid=>{const cl=data.clients.find(x=>x.id===cid);if(!cl||!weekForm)return;const existing=(cl.history||[]).filter(h=>h.weekId!==weekForm.weekId);upd(cid,{history:[...existing,weekForm].sort((a,b)=>a.weekId>b.weekId?1:-1)});setShowUpdate(false);setWeekForm(null);};
+
+  const importHubSpot=async(file)=>{
+    if(!file)return;
+    setHsLoading(true);setHsError("");
+    try{
+      const base64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(file);});
+      const mediaType=file.type||"image/png";
+      const resp=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:1000,
+          system:"You are extracting sales metrics from a HubSpot CRM screenshot. Return ONLY a valid JSON object with these exact keys (use 0 if not visible): calls, connectedCalls, noAnswer, wrongNumber, voicemails, emailsSent, linkedinSent, contactsWorked, mb, ma, newDeals, dealsWon, hotLeads, warmLeads, pipelineValue, closedWonValue. No explanation, no markdown, just the JSON object.",
+          messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:mediaType,data:base64}},{type:"text",text:"Extract all the sales metrics from this HubSpot screenshot into the JSON format specified."}]}]
+        })
+      });
+      const d=await resp.json();
+      if(d.error)throw new Error(d.error.message);
+      const text=(d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
+      const clean=text.replace(/```json|```/g,"").trim();
+      const parsed=JSON.parse(clean);
+      setWeekForm(f=>({...f,...parsed}));
+      setHsError("✓ Data extracted — review and adjust if needed, then save.");
+    }catch(e){setHsError("Could not read screenshot: "+e.message+". Please check it's a clear HubSpot screengrab and try again.");}
+    setHsLoading(false);
+  };
+
+  if(sel){
+    const cl=data.clients.find(x=>x.id===sel.id);if(!cl){setSel(null);return null;}
+    const stats=getAggStats(cl.history,period);const stages=getStages(cl.pkg);const si=stages.indexOf(cl.stage);
+    const repColor=GP_COLOR[cl.gp]||"#888";const repIni=GP_INI[cl.gp]||"?";const repName=GP_NAME[cl.gp]||cl.gp;
+    const curWeek=getISOWeek();const hasUpdate=(cl.history||[]).some(h=>h.weekId===curWeek);
+    return <div>
+      <button style={{...S.btn(),marginBottom:16,fontSize:12}} onClick={()=>setSel(null)}>← Back</button>
+      <div style={{...S.row,justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:8}}>
+        <div><div style={S.pt}>{cl.name}</div><div style={{...S.row,gap:8,marginTop:6,flexWrap:"wrap"}}><span style={S.bdg(cl.status)}>{cl.status}</span><span style={S.bdg("Sales")}>{cl.pkg}</span><div style={S.row}><div style={{...S.av(repColor),width:18,height:18,fontSize:9}}>{repIni}</div><span style={{fontSize:12,color:"var(--color-text-secondary)"}}>{repName}</span></div></div></div>
+        <div style={S.row}>
+          <div style={S.row}>{["week","month","quarter","all"].map(p=><button key={p} style={{...S.btn(),fontSize:11,padding:"3px 8px",background:period===p?BRAND:"transparent",color:period===p?"#fff":"var(--color-text-secondary)",border:period===p?"none":"0.5px solid var(--color-border-secondary)"}} onClick={()=>setPeriod(p)}>{p}</button>)}</div>
+          {canEdit&&<button style={{...S.btn("p"),fontSize:12,background:hasUpdate?"#3B6D11":BRAND}} onClick={()=>{setWeekMode("current");setWeekForm({weekId:curWeek,weekStart:todayStr(),...blankWeek(),...((cl.history||[]).find(h=>h.weekId===curWeek)||{})});setShowUpdate(true);}}>{hasUpdate?"✓ Week updated":"+ Update this week"}</button>}
+          {canEdit&&<button style={{...S.btn(),fontSize:12}} onClick={()=>{setWeekMode("prior");setWeekForm({weekId:"prior",weekStart:"prior",...blankWeek(),...((cl.history||[]).find(h=>h.weekId==="prior")||{})});setShowUpdate(true);}}>{(cl.history||[]).some(h=>h.weekId==="prior")?"✓ Prior data":"+ Add prior data"}</button>}
+          {adm&&<select style={{...S.sel,width:"auto"}} value={cl.status} onChange={e=>upd(cl.id,{status:e.target.value})}>{CLI_ST.map(s=><option key={s}>{s}</option>)}</select>}
+        </div>
+      </div>
+      <KpiBanner stats={stats} closedWonValue={cl.closedWonValue||0}/>
+      <div style={{...S.card,marginBottom:16}}>
+        <div style={S.ct}>Activity <span style={{fontSize:11,color:"var(--color-text-tertiary)",fontWeight:400}}>({period})</span></div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10}}>
+          {[["Calls",stats.calls],["Connected",stats.connectedCalls],["No answer",stats.noAnswer],["Wrong no.",stats.wrongNumber],["Voicemails",stats.voicemails],["Emails",stats.emailsSent],["LinkedIn",stats.linkedinSent],["Contacts",stats.contactsWorked],["New deals",stats.newDeals],["Deals won",stats.dealsWon]].map(([l,v])=>
+            <div key={l} style={{textAlign:"center",padding:"8px 4px",background:"var(--color-background-secondary)",borderRadius:8}}><div style={{fontSize:18,fontWeight:600}}>{(v||0).toLocaleString()}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{l}</div></div>
+          )}
+        </div>
+      </div>
+      {(cl.history||[]).length>0&&<div style={S.card}><div style={{...S.row,justifyContent:"space-between",marginBottom:12}}><div style={S.ct}>Weekly history</div>{canEdit&&<button style={{...S.btn(),fontSize:11,color:"#A32D2D",padding:"4px 10px"}} onClick={()=>{if(window.confirm("Clear ALL history?"))upd(cl.id,{history:[]});}}>Clear all</button>}</div>
+        <table style={S.tbl}><thead><tr><th style={S.th}>Week</th><th style={S.th}>Calls</th><th style={S.th}>Connected</th><th style={S.th}>Contacts</th><th style={S.th}>Booked</th><th style={S.th}>Attended</th><th style={S.th}>Deals</th><th style={S.th}></th></tr></thead>
+        <tbody>{[...(cl.history||[])].reverse().map(h=><tr key={h.weekId} style={{background:h.weekId==="prior"?"var(--color-background-secondary)":"transparent"}}><td style={{...S.td,fontWeight:500}}>{h.weekId==="prior"?<span style={{color:BRAND,fontWeight:600}}>Prior data (baseline)</span>:<>{h.weekId}<br/><span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{fmt(h.weekStart)}</span></>}</td><td style={S.td}>{h.calls||0}</td><td style={S.td}>{h.connectedCalls||0}</td><td style={S.td}>{h.contactsWorked||0}</td><td style={S.td}>{h.mb||0}</td><td style={S.td}>{h.ma||0}</td><td style={S.td}>{h.dealsWon||0}</td><td style={S.td}><div style={S.row}>{canEdit&&<button style={{background:"none",border:"none",cursor:"pointer",color:BRAND,fontSize:12,padding:"2px 6px",fontFamily:"inherit"}} onClick={()=>{setWeekMode(h.weekId==="prior"?"prior":"current");setWeekForm({...blankWeek(),...h});setShowUpdate(true);}}>Edit</button>}{canEdit&&<button style={{background:"none",border:"none",cursor:"pointer",color:"#A32D2D",fontSize:12,padding:"2px 6px",fontFamily:"inherit"}} onClick={()=>{if(window.confirm(`Delete ${h.weekId==="prior"?"prior data":h.weekId}?`))upd(cl.id,{history:(cl.history||[]).filter(x=>x.weekId!==h.weekId)});}}>Del</button>}</div></td></tr>)}</tbody>
+        </table>
+      </div>}
+      <div style={S.g(2)}>
+        <div style={{...S.card,marginBottom:0}}><div style={{...S.row,justifyContent:"space-between",marginBottom:8}}><div style={S.ct}>Stage</div>{adm&&<select style={{...S.sel,width:"auto",fontSize:11}} value={cl.stage} onChange={e=>upd(cl.id,{stage:e.target.value})}>{stages.map(s=><option key={s}>{s}</option>)}</select>}</div><div style={{fontSize:20,fontWeight:500,color:BRAND,marginBottom:4}}>{cl.stage}</div>{cl.pkg==="Outbound Starter"&&<><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:8}}>Stage {si+1} of 7</div><div style={{display:"flex",gap:3}}>{ST_OB.map((_,i)=><div key={i} style={{flex:1,height:4,borderRadius:2,background:i<=si?BRAND:"var(--color-border-tertiary)"}}/>)}</div></>}</div>
+        <div style={{...S.card,marginBottom:0}}><div style={S.ct}>Account notes</div>{adm?<textarea style={{...S.inp,height:80,resize:"vertical",fontSize:12}} defaultValue={cl.notes} onBlur={e=>upd(cl.id,{notes:e.target.value})}/>:<div style={{fontSize:13,color:"var(--color-text-secondary)",lineHeight:1.5}}>{cl.notes||"No notes yet."}</div>}</div>
+      </div>
+      {/* Upcoming meetings */}
+      {(()=>{
+        const clientMtgs=data.meetings.filter(m=>(m.clientId===cl.id)||(m.client&&m.client.toLowerCase().includes(cl.name.split(" ")[0].toLowerCase())));
+        const upcoming=clientMtgs.filter(m=>m.status==="booked").sort((a,b)=>new Date(a.booked)-new Date(b.booked));
+        const attended=clientMtgs.filter(m=>m.status==="attended").length;
+        return <div style={{...S.card,marginBottom:16}}>
+          <div style={{...S.row,justifyContent:"space-between",marginBottom:12}}>
+            <div style={S.ct}>Meetings</div>
+            <span style={{fontSize:12,color:"var(--color-text-tertiary)"}}>{attended} attended all time</span>
+          </div>
+          {upcoming.length===0&&<div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>No upcoming meetings booked.</div>}
+          {upcoming.map(m=>{const rep=getUser(m.sp);return <div key={m.id} style={{...S.row,justifyContent:"space-between",padding:"8px 0",borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+            <div style={S.row}><div style={{width:8,height:8,borderRadius:"50%",background:BRAND,flexShrink:0}}/><div><div style={{fontSize:13,fontWeight:500}}>{m.contact||<span style={{color:"var(--color-text-tertiary)"}}>Contact TBC</span>}</div><div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:1}}>{fmt(m.booked)}{rep?` · ${rep.name}`:""}</div></div></div>
+            <span style={S.bdg("booked")}>booked</span>
+          </div>;})}
+        </div>;
+      })()}
+      <div style={S.g(2)}>
+        <div style={{...S.card,marginBottom:0}}><div style={S.ct}>Next actions</div>
+          {adm&&<div style={{...S.row,marginBottom:12,gap:6}}><input style={{...S.inp,flex:1}} placeholder="Add action…" value={nAct} onChange={e=>setNAct(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&nAct.trim()){upd(cl.id,{actions:[nAct,...(cl.actions||[])]});setNAct("");}}}/><button style={S.btn("p")} onClick={()=>{if(nAct.trim()){upd(cl.id,{actions:[nAct,...(cl.actions||[])]});setNAct("");}}}>Add</button></div>}
+          {!(cl.actions||[]).length&&<div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>No actions yet.</div>}
+          {(cl.actions||[]).map((a,i)=><div key={i} style={{...S.row,justifyContent:"space-between",padding:"6px 0",borderBottom:"0.5px solid var(--color-border-tertiary)"}}><div style={{fontSize:13,display:"flex",gap:8,alignItems:"flex-start"}}><span style={{color:BRAND,flexShrink:0}}>→</span>{typeof a==="string"?a:a.text}</div>{adm&&<button style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-text-tertiary)",fontSize:14}} onClick={()=>upd(cl.id,{actions:(cl.actions||[]).filter((_,j)=>j!==i)})}>×</button>}</div>)}
+        </div>
+        <div style={{...S.card,marginBottom:0}}><div style={S.ct}>Key insights</div>
+          {adm&&<div style={{...S.row,marginBottom:12,gap:6}}><input style={{...S.inp,flex:1}} placeholder="Add insight…" value={nIns} onChange={e=>setNIns(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&nIns.trim()){upd(cl.id,{insights:[{text:nIns,date:todayStr(),author:user.name},...(cl.insights||[])]});setNIns("");}}}/><button style={S.btn("p")} onClick={()=>{if(nIns.trim()){upd(cl.id,{insights:[{text:nIns,date:todayStr(),author:user.name},...(cl.insights||[])]});setNIns("");}}}>Add</button></div>}
+          {!(cl.insights||[]).length&&<div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>No insights yet.</div>}
+          {(cl.insights||[]).map((ins,i)=>{const t=typeof ins==="string"?ins:ins.text;const d=typeof ins==="object"?ins.date:null;const a=typeof ins==="object"?ins.author:null;return <div key={i} style={{padding:"8px 0",borderBottom:"0.5px solid var(--color-border-tertiary)"}}><div style={{...S.row,justifyContent:"space-between"}}><div style={{fontSize:13,lineHeight:1.5,flex:1}}>{t}</div>{adm&&<button style={{background:"none",border:"none",cursor:"pointer",color:"var(--color-text-tertiary)",fontSize:14}} onClick={()=>upd(cl.id,{insights:(cl.insights||[]).filter((_,j)=>j!==i)})}>×</button>}</div>{d&&<div style={{fontSize:11,color:"var(--color-text-tertiary)",marginTop:2}}>{a?a+" · ":""}{fmt(d)}</div>}</div>;})}
+        </div>
+      </div>
+      {/* Update modal */}
+      {showUpdate&&weekForm&&<div style={S.modal} onClick={e=>e.target===e.currentTarget&&setShowUpdate(false)}>
+        <div style={S.mbox}>
+          <div style={{fontSize:15,fontWeight:600,marginBottom:4,color:"#111"}}>{weekMode==="prior"?"Prior data — cumulative baseline":`Weekly update — ${weekForm.weekId}`}</div>
+          {weekMode!=="prior"&&<div style={{...S.row,gap:8,marginBottom:12,alignItems:"center"}}>
+            <label style={{fontSize:12,color:"#555",whiteSpace:"nowrap"}}>Week starting:</label>
+            <input type="date" style={{...minp(),width:"auto",flex:1}} value={weekForm.weekStart||""} onChange={e=>{const d=e.target.value;if(!d)return;const dt=new Date(d+"T12:00:00");dt.setDate(dt.getDate()+3-(dt.getDay()+6)%7);const w1=new Date(dt.getFullYear(),0,4);const wid=`${dt.getFullYear()}-W${String(1+Math.round(((dt-w1)/86400000-3+(w1.getDay()+6)%7)/7)).padStart(2,"0")}`;const existing=(cl.history||[]).find(h=>h.weekId===wid)||{};setWeekForm(f=>({...f,weekStart:d,weekId:wid,...blankWeek(),...existing}));}}/>
+            <span style={{fontSize:11,color:BRAND,fontWeight:500,whiteSpace:"nowrap"}}>{weekForm.weekId}</span>
+          </div>}
+          {/* HubSpot screenshot importer */}
+          {weekMode!=="prior"&&<div style={{padding:"10px 14px",background:"#EAF3FB",borderRadius:8,marginBottom:12}}>
+            <div style={{...S.row,justifyContent:"space-between",marginBottom:6}}>
+              <div><div style={{fontSize:12,fontWeight:600,color:"#185FA5"}}>📸 Import from HubSpot screenshot</div><div style={{fontSize:11,color:"#555",marginTop:2}}>Take a screengrab of the client's HubSpot — Claude will read the numbers automatically</div></div>
+              <label style={{...S.btn("p"),fontSize:11,padding:"5px 12px",cursor:"pointer",opacity:hsLoading?0.6:1}}>
+                {hsLoading?"Reading…":"Upload screenshot"}
+                <input type="file" accept="image/*" style={{display:"none"}} disabled={hsLoading} onChange={e=>importHubSpot(e.target.files?.[0])}/>
+              </label>
+            </div>
+            {hsError&&<div style={{fontSize:12,color:hsError.startsWith("✓")?"#0F6E56":"#A32D2D",marginTop:4}}>{hsError}</div>}
+          </div>}
+          <div style={{fontSize:12,color:"#888",marginBottom:16}}>{weekMode==="prior"?"Enter cumulative totals before you started using this platform.":"Numbers from HubSpot. Change the date to update any past week."}</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"10px 16px"}}>
+            {[["calls","Total calls"],["connectedCalls","Connected calls"],["noAnswer","No answer"],["wrongNumber","Wrong number"],["voicemails","Voicemails"],["emailsSent","Emails sent"],["linkedinSent","LinkedIn sent"],["contactsWorked","Contacts worked"],["mb","Meetings booked"],["ma","Meetings attended"],["newDeals","New deals"],["dealsWon","Deals closed won"],["hotLeads","Hot leads"],["warmLeads","Warm leads"],["pipelineValue","Pipeline built (£ total)"],["closedWonValue","Closed won (£ all-time)"],["dtm","Dials this month"],["dt","Total dials"],["lis","Leads in sequence"]].map(([k,l])=><div key={k}><label style={mlbl()}>{l}</label><input style={k==="closedWonValue"?{...minp(),borderColor:BRAND,background:BL}:minp()} type="number" value={k==="closedWonValue"?(cl.closedWonValue||0):(weekForm[k]||0)} onChange={e=>{if(k==="closedWonValue"){upd(cl.id,{closedWonValue:Number(e.target.value)});}else{setWeekForm(f=>({...f,[k]:Number(e.target.value)}));}}}/></div>)}
+          </div>
+          <div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:20}}><button style={S.btn()} onClick={()=>setShowUpdate(false)}>Cancel</button><button style={S.btn("p")} onClick={()=>submitWeek(cl.id)}>Save</button></div>
+        </div>
+      </div>}
+    </div>;
+  }
+
+  const groups={active:data.clients.filter(x=>x.status==="active"),onboarding:data.clients.filter(x=>x.status==="onboarding"),confirmed:data.clients.filter(x=>x.status==="confirmed"),other:data.clients.filter(x=>!["active","onboarding","confirmed"].includes(x.status))};
+  const gpOpts=Object.keys(GP_NAME).map(id=>({v:id,l:GP_NAME[id]}));
+  return <div>
+    <div style={{...S.row,justifyContent:"space-between",marginBottom:4}}><div style={S.pt}>Client Delivery</div>{adm&&<button style={S.btn("p")} onClick={()=>setShowAdd(true)}>+ Add client</button>}</div>
+    <div style={S.ps}>Track every account{adm&&<span style={{color:BRAND,marginLeft:8,fontSize:12}}>· Click any underlined cell to edit inline</span>}</div>
+    <div style={S.g(4)}><Met label="Active" value={groups.active.length}/><Met label="Onboarding" value={groups.onboarding.length}/><Met label="Confirmed" value={groups.confirmed.length}/><Met label="Total closed won" value={`£${data.clients.reduce((a,cl)=>a+(cl.closedWonValue||0),0).toLocaleString()}`} color="#0F6E56"/></div>
+    {Object.entries(groups).filter(([,list])=>list.length>0).map(([grp,list])=><div key={grp}>
+      <div style={{fontSize:11,fontWeight:500,color:"var(--color-text-tertiary)",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8,marginTop:16}}>{grp} ({list.length})</div>
+      <div style={S.card}><table style={S.tbl}>
+        <thead><tr><th style={S.th}>Client</th><th style={S.th}>Package</th><th style={S.th}>Rep</th><th style={S.th}>Stage</th><th style={S.th}>Status</th><th style={S.th}>Booked</th><th style={S.th}>Attended</th><th style={S.th}>Rate</th><th style={S.th}>Pipeline</th><th style={S.th}>Closed won</th><th style={S.th}></th></tr></thead>
+        <tbody>{list.map(cl=>{
+          const st=getAggStats(cl.history,"all");const stgOpts=getStages(cl.pkg).map(s=>({v:s,l:s}));
+          const hasUpdate=(cl.history||[]).some(h=>h.weekId===getISOWeek());
+          return <tr key={cl.id}>
+            <td style={{...S.td,fontWeight:500}}><div style={S.row}><EC value={cl.name} canEdit={adm} onChange={v=>upd(cl.id,{name:v})}/>{!hasUpdate&&cl.status==="active"&&<span style={{fontSize:9,background:"#FAEEDA",color:"#854F0B",padding:"1px 5px",borderRadius:10,fontWeight:600}}>needs update</span>}</div></td>
+            <td style={S.td}><EC value={cl.pkg} canEdit={adm} opts={PKGS.map(p=>({v:p,l:p}))} onChange={v=>upd(cl.id,{pkg:v,stage:getStages(v)[0]})}/></td>
+            <td style={S.td}><EC value={GP_NAME[cl.gp]||cl.gp} canEdit={adm} opts={gpOpts} onChange={v=>upd(cl.id,{gp:v})}/></td>
+            <td style={S.td}><EC value={cl.stage} canEdit={adm} opts={stgOpts} onChange={v=>upd(cl.id,{stage:v})}/></td>
+            <td style={S.td}><EC value={cl.status} canEdit={adm} opts={CLI_ST.map(s=>({v:s,l:s}))} onChange={v=>upd(cl.id,{status:v})}/></td>
+            <td style={S.td}>{st.mb||0}</td><td style={S.td}>{st.ma||0}</td>
+            <td style={S.td}><span style={{fontSize:12,color:(st.mb>0&&st.ma/st.mb>=0.8)?"#0F6E56":"var(--color-text-secondary)"}}>{pct(st.ma,st.mb)}</span></td>
+            <td style={S.td}>{(st.pipelineValue||0)>0?`£${(st.pipelineValue||0).toLocaleString()}`:"—"}</td>
+            <td style={{...S.td,fontWeight:500,color:(cl.closedWonValue||0)>0?"#0F6E56":"var(--color-text-tertiary)"}}>{(cl.closedWonValue||0)>0?`£${(cl.closedWonValue||0).toLocaleString()}`:"—"}</td>
+            <td style={S.td}><button style={{...S.btn(),fontSize:11,padding:"3px 10px"}} onClick={()=>setSel(cl)}>Open →</button></td>
+          </tr>;
+        })}</tbody>
+      </table></div>
+    </div>)}
+    {showAdd&&<div style={S.modal} onClick={e=>e.target===e.currentTarget&&setShowAdd(false)}>
+      <div style={S.mbox}>
+        <div style={{fontSize:15,fontWeight:600,marginBottom:16,color:"#111"}}>Add client</div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Client name</label><input style={minp()} value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Package</label><select style={msel()} value={form.pkg} onChange={e=>setForm({...form,pkg:e.target.value})}>{PKGS.map(p=><option key={p}>{p}</option>)}</select></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Rep</label><select style={msel()} value={form.gp} onChange={e=>setForm({...form,gp:e.target.value})}>{Object.keys(GP_NAME).map(id=><option key={id} value={id}>{GP_NAME[id]}</option>)}</select></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Status</label><select style={msel()} value={form.status} onChange={e=>setForm({...form,status:e.target.value})}>{CLI_ST.map(s=><option key={s}>{s}</option>)}</select></div>
+        <div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:20}}><button style={S.btn()} onClick={()=>setShowAdd(false)}>Cancel</button><button style={S.btn("p")} onClick={()=>{if(!form.name)return;onSave({...data,clients:[{...form,id:Date.now(),closedWonValue:0,actions:[],insights:[],stage:getStages(form.pkg)[0],history:[]},...data.clients]});setShowAdd(false);}}>Add client</button></div>
+      </div>
+    </div>}
+  </div>;
+}
+
+// ── Meetings ──────────────────────────────────────────────────────────────────
+function Meetings({user,data,onSave}){
+  const adm=user.role==="admin";
+  const[showAdd,setShowAdd]=useState(false);
+  const[commPrompt,setCommPrompt]=useState(null);
+  const[logTeam,setLogTeam]=useState(true);
+  const[logClient,setLogClient]=useState(true);
+  const[form,setForm]=useState({clientId:"",client:"",contact:"",sp:"harry",booked:"",attended:"",status:"booked"});
+  const mtgs=(adm?data.meetings:data.meetings.filter(m=>m.sp===user.id)).sort((a,b)=>new Date(b.booked)-new Date(a.booked));
+  const clientOpts=[{id:"",name:"— Other / not listed —"},...data.clients.map(c=>({id:c.id,name:c.name}))];
+
+  const handleClientSelect=id=>{const cl=data.clients.find(c=>c.id===Number(id));setForm(f=>({...f,clientId:id?Number(id):"",client:cl?cl.name:f.client}));};
+
+  const addMeetingAndCalendar=(newMtg,currentData)=>{
+    const calEvt={id:Date.now()+1,title:`${newMtg.contact?newMtg.contact+" — ":""}${newMtg.client} meeting`,date:newMtg.booked,type:"meeting",notes:`Booked by ${getUser(newMtg.sp)?.name||"team"}${newMtg.contact?" with "+newMtg.contact:""}`,createdBy:user.id,meetingId:newMtg.id};
+    return{...currentData,meetings:[newMtg,...currentData.meetings],calendarEvents:[calEvt,...(currentData.calendarEvents||[])]};
+  };
+
+  const markAttended=m=>{
+    const today=todayStr();
+    const updMtgs=data.meetings.map(x=>x.id===m.id?{...x,status:"attended",attended:today}:x);
+    const monthStr=today.slice(0,7);
+    const attendedThisMonth=updMtgs.filter(x=>x.sp===m.sp&&x.status==="attended"&&(x.attended||"").startsWith(monthStr)).length;
+    const teamAmt=calcTeamCommission(attendedThisMonth)-calcTeamCommission(attendedThisMonth-1);
+    const cfg=getClientCommConfig(m.clientId,m.client);
+    const clientAmt=(cfg&&(cfg.type==="perMeeting"||cfg.type==="mixed"))?{amount:cfg.ratePerMeeting||0,label:`£${cfg.ratePerMeeting} per attended meeting (${m.client})`}:null;
+    const rep=getUser(m.sp);
+    onSave({...data,meetings:updMtgs});
+    setLogTeam(teamAmt>0);
+    setLogClient(!!clientAmt);
+    setCommPrompt({rep,teamAmt,clientAmt,meeting:m,attendedThisMonth,totalTeam:calcTeamCommission(attendedThisMonth)});
+  };
+
+  const logComm=(prompt,logTeam,logClient)=>{
+    const today=todayStr();const newComms=[...data.commissions];const newInvoices=[...(data.clientInvoices||[])];
+    if(logTeam&&prompt.teamAmt>0){newComms.unshift({id:Date.now(),sp:prompt.rep.id,client:prompt.meeting.client,contact:prompt.meeting.contact||"",amount:prompt.teamAmt,date:today,status:"pending",note:`Meeting ${prompt.attendedThisMonth} this month — tiered rate`});}
+    if(logClient&&prompt.clientAmt){newInvoices.unshift({id:Date.now()+1,clientId:prompt.meeting.clientId||"",clientName:prompt.meeting.client,month:today.slice(0,7),type:"meeting",amount:prompt.clientAmt.amount,note:prompt.clientAmt.label,status:"draft",createdAt:today,invoicedDate:null,paidDate:null});}
+    onSave({...data,commissions:newComms,clientInvoices:newInvoices});
+    setCommPrompt(null);
+  };
+
+  return <div>
+    <div style={{...S.row,justifyContent:"space-between",marginBottom:4}}><div style={S.pt}>Meetings</div><button style={S.btn("p")} onClick={()=>setShowAdd(true)}>+ Add meeting</button></div>
+    <div style={S.ps}>Book a meeting here — auto-appears on calendar and client page</div>
+    <div style={S.g(4)}><Met label="Booked" value={mtgs.filter(m=>m.status==="booked").length}/><Met label="Attended" value={mtgs.filter(m=>m.status==="attended").length}/><Met label="No-show" value={mtgs.filter(m=>m.status==="no-show").length}/><Met label="Show rate" value={(()=>{const c=mtgs.filter(m=>m.status==="attended"||m.status==="no-show");return c.length?Math.round(mtgs.filter(m=>m.status==="attended").length/c.length*100)+"%":"—";})()}/></div>
+    <div style={S.card}><table style={S.tbl}>
+      <thead><tr><th style={S.th}>Client</th><th style={S.th}>Booked with</th>{adm&&<th style={S.th}>Rep</th>}<th style={S.th}>Booked</th><th style={S.th}>Attended</th><th style={S.th}>Status</th><th style={S.th}>Actions</th></tr></thead>
+      <tbody>{mtgs.map(m=>{const u=getUser(m.sp);return <tr key={m.id}>
+        <td style={{...S.td,fontWeight:500}}>{m.client}</td>
+        <td style={{...S.td,color:"var(--color-text-secondary)"}}>{m.contact||<span style={{color:"var(--color-text-tertiary)"}}>—</span>}</td>
+        {adm&&<td style={S.td}><div style={S.row}><div style={{...S.av(u?.color||"#888"),width:20,height:20,fontSize:9}}>{u?.ini}</div>{u?.name}</div></td>}
+        <td style={S.td}>{fmt(m.booked)}</td><td style={S.td}>{fmt(m.attended)}</td>
+        <td style={S.td}><span style={S.bdg(m.status)}>{m.status}</span></td>
+        <td style={S.td}><div style={{...S.row,flexWrap:"wrap",gap:4}}>
+          {m.status==="booked"&&<button style={{...S.btn(),fontSize:11,padding:"3px 8px"}} onClick={()=>markAttended(m)}>Attended</button>}
+          {m.status==="booked"&&<button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:"#854F0B"}} onClick={()=>onSave({...data,meetings:data.meetings.map(x=>x.id===m.id?{...x,status:"no-show"}:x)})}>No-show</button>}
+          {m.status==="booked"&&<button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:"#5F5E5A"}} onClick={()=>onSave({...data,meetings:data.meetings.map(x=>x.id===m.id?{...x,status:"rescheduled"}:x)})}>Rescheduled</button>}
+          {m.status==="booked"&&<button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:"#5F5E5A"}} onClick={()=>onSave({...data,meetings:data.meetings.map(x=>x.id===m.id?{...x,status:"cancelled"}:x)})}>Cancel</button>}
+          {(m.status==="rescheduled"||m.status==="no-show"||m.status==="cancelled")&&<button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:BD}} onClick={()=>onSave({...data,meetings:data.meetings.map(x=>x.id===m.id?{...x,status:"booked"}:x)})}>Reopen</button>}
+          <button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={()=>{if(window.confirm("Remove?"))onSave({...data,meetings:data.meetings.filter(x=>x.id!==m.id)})}}>×</button>
+        </div></td>
+      </tr>;})}</tbody>
+    </table></div>
+
+    {/* Commission prompt */}
+    {commPrompt&&<div style={S.modal}>
+        <div style={S.mbox}>
+          <div style={{fontSize:15,fontWeight:600,marginBottom:12,color:"#111"}}>💰 Commission to log</div>
+          {commPrompt.teamAmt>0&&<div style={{padding:"10px 14px",background:"#EAF3FB",borderRadius:8,marginBottom:10}}>
+            <div style={{...S.row,justifyContent:"space-between"}}>
+              <div><div style={{fontSize:12,fontWeight:600,color:"#185FA5",marginBottom:2}}>Team commission — {commPrompt.rep?.name}</div><div style={{fontSize:13,color:"#333"}}>Meeting {commPrompt.attendedThisMonth} this month → <strong>£{commPrompt.teamAmt}</strong></div><div style={{fontSize:11,color:"#555",marginTop:2}}>Month total: £{commPrompt.totalTeam}</div></div>
+              <label style={{...S.row,gap:6,cursor:"pointer"}}><input type="checkbox" checked={logTeam} onChange={e=>setLogTeam(e.target.checked)} style={{accentColor:BRAND}}/><span style={{fontSize:12}}>Log</span></label>
+            </div>
+          </div>}
+          {commPrompt.clientAmt&&<div style={{padding:"10px 14px",background:"#E1F5EE",borderRadius:8,marginBottom:10}}>
+            <div style={{...S.row,justifyContent:"space-between"}}>
+              <div><div style={{fontSize:12,fontWeight:600,color:"#0F6E56",marginBottom:2}}>Client commission owed to Momentum</div><div style={{fontSize:13,color:"#333"}}><strong>£{commPrompt.clientAmt.amount}</strong> — {commPrompt.clientAmt.label}</div><div style={{fontSize:11,color:"#555",marginTop:2}}>Goes to Client Commissions as a draft</div></div>
+              <label style={{...S.row,gap:6,cursor:"pointer"}}><input type="checkbox" checked={logClient} onChange={e=>setLogClient(e.target.checked)} style={{accentColor:BRAND}}/><span style={{fontSize:12}}>Log</span></label>
+            </div>
+          </div>}
+          {!commPrompt.teamAmt&&!commPrompt.clientAmt&&<div style={{fontSize:13,color:"#555",marginBottom:12}}>No commission rules configured for this client. Log manually from the commissions tabs.</div>}
+          <div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:16}}>
+            <button style={S.btn()} onClick={()=>setCommPrompt(null)}>Skip</button>
+            <button style={S.btn("p")} onClick={()=>logComm(commPrompt,logTeam,logClient)}>Log selected</button>
+          </div>
+        </div>
+      </div>}
+
+    {/* Add meeting modal */}
+    {showAdd&&<div style={S.modal} onClick={e=>e.target===e.currentTarget&&setShowAdd(false)}>
+      <div style={S.mbox}>
+        <div style={{fontSize:15,fontWeight:600,marginBottom:4,color:"#111"}}>Add meeting</div>
+        <div style={{fontSize:12,color:"#888",marginBottom:16}}>Auto-appears on team calendar and client page.</div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Client</label><select style={msel()} value={form.clientId||""} onChange={e=>handleClientSelect(e.target.value)}>{clientOpts.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        {!form.clientId&&<div style={{marginBottom:12}}><label style={mlbl()}>Client name (if not listed)</label><input style={minp()} value={form.client} onChange={e=>setForm({...form,client:e.target.value})} placeholder="e.g. Guessworks"/></div>}
+        <div style={{marginBottom:12}}><label style={mlbl()}>Booked with (contact name)</label><input style={minp()} value={form.contact} onChange={e=>setForm({...form,contact:e.target.value})} placeholder="e.g. Andy Vaughan"/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Rep</label><select style={msel()} value={form.sp} onChange={e=>setForm({...form,sp:e.target.value})}>{USERS.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Booked date</label><input style={minp()} type="date" value={form.booked} onChange={e=>setForm({...form,booked:e.target.value})}/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Status</label><select style={msel()} value={form.status} onChange={e=>setForm({...form,status:e.target.value})}><option value="booked">Booked</option><option value="attended">Attended</option><option value="no-show">No-show</option><option value="rescheduled">Rescheduled</option><option value="cancelled">Cancelled</option></select></div>
+        {form.status==="attended"&&<div style={{marginBottom:12}}><label style={mlbl()}>Attended date</label><input style={minp()} type="date" value={form.attended} onChange={e=>setForm({...form,attended:e.target.value})}/></div>}
+        <div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:20}}>
+          <button style={S.btn()} onClick={()=>setShowAdd(false)}>Cancel</button>
+          <button style={S.btn("p")} onClick={()=>{
+            if((!form.clientId&&!form.client)||!form.booked)return;
+            const newMtg={...form,id:Date.now()};
+            const newData=addMeetingAndCalendar(newMtg,data);
+            onSave(newData);
+            setShowAdd(false);
+            setForm({clientId:"",client:"",contact:"",sp:"harry",booked:"",attended:"",status:"booked"});
+            if(form.status==="attended"){
+              const monthStr=(form.attended||form.booked||todayStr()).slice(0,7);
+              const attendedThisMonth=[...newData.meetings].filter(x=>x.sp===form.sp&&x.status==="attended"&&(x.attended||x.booked||"").startsWith(monthStr)).length;
+              const teamAmt=calcTeamCommission(attendedThisMonth)-calcTeamCommission(attendedThisMonth-1);
+              const cfg=getClientCommConfig(form.clientId,form.client);
+              const clientAmt=(cfg&&(cfg.type==="perMeeting"||cfg.type==="mixed"))?{amount:cfg.ratePerMeeting||0,label:`£${cfg.ratePerMeeting} per attended meeting (${form.client})`}:null;
+              const rep=getUser(form.sp);
+              if(teamAmt>0||clientAmt)setCommPrompt({rep,teamAmt,clientAmt,meeting:newMtg,attendedThisMonth,totalTeam:calcTeamCommission(attendedThisMonth)});
+            }
+          }}>Add meeting</button>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
+// ── Team Commissions ──────────────────────────────────────────────────────────
+function Commissions({user,data,onSave}){
+  const adm=user.role==="admin";
+  const now=new Date();
+  const currentMonth=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  const[selectedMonth,setSelectedMonth]=useState(currentMonth);
+  const[showAdd,setShowAdd]=useState(false);
+  const[editComm,setEditComm]=useState(null);
+  const[form,setForm]=useState({sp:"harry",client:"",contact:"",amount:"",date:"",status:"pending",note:""});
+
+  const months=Array.from({length:12},(_,i)=>{const d=new Date(now.getFullYear(),now.getMonth()-i,1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;});
+  const allCms=adm?data.commissions:data.commissions.filter(x=>x.sp===user.id);
+  const monthCms=allCms.filter(x=>x.date&&x.date.startsWith(selectedMonth)).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const totalAll=allCms.reduce((a,b)=>a+b.amount,0);
+  const paidAll=allCms.filter(x=>x.status==="paid").reduce((a,b)=>a+b.amount,0);
+  const pendAll=allCms.filter(x=>x.status==="pending").reduce((a,b)=>a+b.amount,0);
+
+  const suggestions=(()=>{
+    if(selectedMonth!==currentMonth||!adm)return[];
+    const attended=data.meetings.filter(m=>m.status==="attended"&&m.attended&&m.attended.startsWith(currentMonth));
+    const byRep={};
+    for(const m of attended){if(!byRep[m.sp])byRep[m.sp]={sp:m.sp,meetings:[],count:0};byRep[m.sp].meetings.push(m);byRep[m.sp].count++;}
+    return Object.values(byRep).map(g=>{
+      const expected=calcTeamCommission(g.count);
+      const logged=allCms.filter(c=>c.sp===g.sp&&c.date&&c.date.startsWith(currentMonth)).reduce((a,b)=>a+b.amount,0);
+      const diff=Math.round(expected-logged);
+      return diff>0.5?{sp:g.sp,rep:getUser(g.sp),count:g.count,expected,logged,diff,meetings:g.meetings}:null;
+    }).filter(Boolean);
+  })();
+
+  return <div>
+    <div style={{...S.row,justifyContent:"space-between",marginBottom:4}}>
+      <div style={S.pt}>Team Commissions</div>
+      {adm&&<button style={S.btn("p")} onClick={()=>setShowAdd(true)}>+ Add commission</button>}
+    </div>
+    <div style={S.ps}>{adm?"Monthly view — tiered by meetings attended this month":"Your commission earnings by month"}</div>
+    <div style={S.g(3)}><Met label="All time total" value={`£${totalAll.toLocaleString()}`}/><Met label="All time paid" value={`£${paidAll.toLocaleString()}`} color="#0F6E56"/><Met label="All time pending" value={`£${pendAll.toLocaleString()}`} color="#854F0B"/></div>
+
+    <div style={S.card}>
+      <div style={{...S.row,justifyContent:"space-between",marginBottom:16}}>
+        <div style={S.ct}>Monthly view</div>
+        <select style={{...S.sel,width:"auto"}} value={selectedMonth} onChange={e=>setSelectedMonth(e.target.value)}>{months.map(m=><option key={m} value={m}>{fmtMonth(m)}</option>)}</select>
+      </div>
+
+      {suggestions.length>0&&<div style={{padding:"12px 14px",background:BL,border:`1px solid ${BRAND}30`,borderRadius:8,marginBottom:16}}>
+        <div style={{fontSize:12,fontWeight:600,color:BRAND,marginBottom:8}}>Suggested for {fmtMonth(currentMonth)}</div>
+        {suggestions.map((s,i)=><div key={i} style={{...S.row,justifyContent:"space-between",marginBottom:6}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:500}}>{s.rep?.name} — {s.count} meetings attended</div>
+            <div style={{fontSize:12,color:"var(--color-text-secondary)"}}>{s.meetings.map(m=>m.contact||m.client).join(" · ")} · Expected £{s.expected} · Logged £{s.logged} · Gap £{s.diff}</div>
+          </div>
+          <button style={{...S.btn("p"),fontSize:11,padding:"4px 12px"}} onClick={()=>{const meetingList=s.meetings.map(m=>m.contact||m.client).join(", ");onSave({...data,commissions:[{id:Date.now(),sp:s.sp,client:"Multiple clients",contact:meetingList,amount:s.diff,date:`${currentMonth}-01`,status:"pending",note:`${s.count} meetings in ${fmtMonth(currentMonth)}: ${meetingList}`},...data.commissions]});}}>Log £{s.diff}</button>
+        </div>)}
+      </div>}
+
+      {monthCms.length===0&&<div style={{fontSize:12,color:"var(--color-text-tertiary)",padding:"8px 0"}}>No entries for {fmtMonth(selectedMonth)}.</div>}
+      {monthCms.length>0&&<table style={S.tbl}>
+        <thead><tr>{adm&&<th style={S.th}>Rep</th>}<th style={S.th}>Client</th><th style={S.th}>Booked with</th><th style={S.th}>Amount</th><th style={S.th}>Status</th><th style={S.th}>Note</th>{adm&&<th style={S.th}>Actions</th>}</tr></thead>
+        <tbody>{monthCms.map(x=>{const u=getUser(x.sp);return <tr key={x.id}>
+          {adm&&<td style={S.td}><div style={S.row}><div style={{...S.av(u?.color||"#888"),width:20,height:20,fontSize:9}}>{u?.ini}</div>{u?.name}</div></td>}
+          <td style={{...S.td,fontWeight:500}}>{x.client}</td>
+          <td style={{...S.td,color:"var(--color-text-secondary)",fontSize:12}}>{x.contact||"—"}</td>
+          <td style={{...S.td,fontWeight:600,color:BRAND}}>£{x.amount.toLocaleString()}</td>
+          <td style={S.td}><span style={S.bdg(x.status)}>{x.status}</span></td>
+          <td style={{...S.td,fontSize:11,color:"var(--color-text-tertiary)",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.note||"—"}</td>
+          {adm&&<td style={S.td}><div style={S.row}>
+            {x.status==="pending"&&<button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:"#0F6E56"}} onClick={()=>onSave({...data,commissions:data.commissions.map(c=>c.id===x.id?{...c,status:"paid"}:c)})}>Mark paid</button>}
+            <button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:BRAND}} onClick={()=>setEditComm({...x})}>Edit</button>
+            <button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={()=>{if(window.confirm("Delete?"))onSave({...data,commissions:data.commissions.filter(c=>c.id!==x.id)})}}>×</button>
+          </div></td>}
+        </tr>;})}
+</tbody>
+      </table>}
+      {monthCms.length>0&&<div style={{...S.row,justifyContent:"flex-end",gap:20,marginTop:12,paddingTop:12,borderTop:"0.5px solid var(--color-border-tertiary)"}}>
+        <span style={{fontSize:13}}>Month total: <strong>£{monthCms.reduce((a,b)=>a+b.amount,0).toLocaleString()}</strong></span>
+        <span style={{fontSize:13,color:"#854F0B"}}>Pending: <strong>£{monthCms.filter(x=>x.status==="pending").reduce((a,b)=>a+b.amount,0).toLocaleString()}</strong></span>
+        <span style={{fontSize:13,color:"#0F6E56"}}>Paid: <strong>£{monthCms.filter(x=>x.status==="paid").reduce((a,b)=>a+b.amount,0).toLocaleString()}</strong></span>
+      </div>}
+    </div>
+
+    {editComm&&<div style={S.modal} onClick={e=>e.target===e.currentTarget&&setEditComm(null)}>
+      <div style={S.mbox}>
+        <div style={{fontSize:15,fontWeight:600,marginBottom:16,color:"#111"}}>Edit commission</div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Rep</label><select style={msel()} value={editComm.sp} onChange={e=>setEditComm({...editComm,sp:e.target.value})}>{USERS.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Client</label><input style={minp()} value={editComm.client} onChange={e=>setEditComm({...editComm,client:e.target.value})}/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Booked with</label><input style={minp()} value={editComm.contact||""} onChange={e=>setEditComm({...editComm,contact:e.target.value})}/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Amount (£)</label><input style={minp()} type="number" value={editComm.amount} onChange={e=>setEditComm({...editComm,amount:Number(e.target.value)})}/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Date</label><input style={minp()} type="date" value={editComm.date} onChange={e=>setEditComm({...editComm,date:e.target.value})}/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Status</label><select style={msel()} value={editComm.status} onChange={e=>setEditComm({...editComm,status:e.target.value})}><option value="pending">Pending</option><option value="paid">Paid</option></select></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Note</label><input style={minp()} value={editComm.note||""} onChange={e=>setEditComm({...editComm,note:e.target.value})}/></div>
+        <div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:20}}><button style={S.btn()} onClick={()=>setEditComm(null)}>Cancel</button><button style={S.btn("p")} onClick={()=>{onSave({...data,commissions:data.commissions.map(c=>c.id===editComm.id?editComm:c)});setEditComm(null);}}>Save</button></div>
+      </div>
+    </div>}
+
+    {showAdd&&<div style={S.modal} onClick={e=>e.target===e.currentTarget&&setShowAdd(false)}>
+      <div style={S.mbox}>
+        <div style={{fontSize:15,fontWeight:600,marginBottom:16,color:"#111"}}>Add commission</div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Rep</label><select style={msel()} value={form.sp} onChange={e=>setForm({...form,sp:e.target.value})}>{USERS.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Client</label><input style={minp()} value={form.client} onChange={e=>setForm({...form,client:e.target.value})}/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Booked with</label><input style={minp()} value={form.contact} onChange={e=>setForm({...form,contact:e.target.value})} placeholder="e.g. Andy Vaughan"/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Amount (£)</label><input style={minp()} type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})}/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Date</label><input style={minp()} type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Note</label><input style={minp()} value={form.note} onChange={e=>setForm({...form,note:e.target.value})}/></div>
+        <div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:20}}><button style={S.btn()} onClick={()=>setShowAdd(false)}>Cancel</button><button style={S.btn("p")} onClick={()=>{if(!form.client||!form.amount)return;onSave({...data,commissions:[{...form,id:Date.now(),amount:Number(form.amount)},...data.commissions]});setShowAdd(false);setForm({sp:"harry",client:"",contact:"",amount:"",date:"",status:"pending",note:""});}}>Add</button></div>
+      </div>
+    </div>}
+  </div>;
+}
+
+// ── Client Commissions ────────────────────────────────────────────────────────
+function ClientCommissions({user,data,onSave}){
+  const now=new Date();
+  const currentMonth=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+  const[selectedMonth,setSelectedMonth]=useState(currentMonth);
+  const[showAdd,setShowAdd]=useState(false);
+  const[showDeal,setShowDeal]=useState(false);
+  const[showMargin,setShowMargin]=useState(false);
+  const[invoiceForm,setInvoiceForm]=useState({clientId:"",month:currentMonth,type:"meeting",amount:"",note:""});
+  const[dealForm,setDealForm]=useState({clientId:"",amount:"",date:"",note:""});
+  const[marginForm,setMarginForm]=useState({margin:"",date:currentMonth+"-01",note:""});
+  const months=Array.from({length:12},(_,i)=>{const d=new Date(now.getFullYear(),now.getMonth()-i,1);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;});
+  const invoices=data.clientInvoices||[];
+  const closedWon=data.closedWonDeals||[];
+  const monthInvoices=invoices.filter(i=>i.month===selectedMonth);
+  const statusStyle=s=>{const m={draft:["#F1EFE8","#5F5E5A"],invoiced:[BL,BD],paid:["#EAF3DE","#3B6D11"]};const[bg,co]=m[s]||m.draft;return{fontSize:11,fontWeight:600,padding:"2px 10px",borderRadius:20,background:bg,color:co,display:"inline-block"};};
+  const updateStatus=(id,status)=>onSave({...data,clientInvoices:invoices.map(i=>i.id===id?{...i,status,invoicedDate:status==="invoiced"&&!i.invoicedDate?todayStr():i.invoicedDate,paidDate:status==="paid"?todayStr():i.paidDate}:i)});
+  const totalInvoiced=invoices.reduce((a,b)=>a+b.amount,0);
+  const totalPaid=invoices.filter(i=>i.status==="paid").reduce((a,b)=>a+b.amount,0);
+  const totalOutstanding=invoices.filter(i=>i.status==="invoiced").reduce((a,b)=>a+b.amount,0);
+  const totalDraft=invoices.filter(i=>i.status==="draft").reduce((a,b)=>a+b.amount,0);
+
+  // Auto-suggest meeting commissions for current month
+  const suggestions=selectedMonth===currentMonth?data.clients.filter(cl=>{
+    const cfg=getClientCommConfig(cl.id,cl.name);
+    if(!cfg||(cfg.type!=="perMeeting"&&cfg.type!=="mixed"))return false;
+    const attended=data.meetings.filter(m=>(m.clientId===cl.id||m.client===cl.name)&&m.status==="attended"&&(m.attended||"").startsWith(currentMonth)).length;
+    const logged=invoices.filter(i=>i.clientId===cl.id&&i.month===currentMonth&&i.type==="meeting").reduce((a,b)=>a+b.amount,0);
+    return attended>0&&(attended*(cfg.ratePerMeeting||0))>logged;
+  }).map(cl=>{
+    const cfg=getClientCommConfig(cl.id,cl.name);
+    const attended=data.meetings.filter(m=>(m.clientId===cl.id||m.client===cl.name)&&m.status==="attended"&&(m.attended||"").startsWith(currentMonth)).length;
+    const owed=attended*(cfg.ratePerMeeting||0);
+    const logged=invoices.filter(i=>i.clientId===cl.id&&i.month===currentMonth&&i.type==="meeting").reduce((a,b)=>a+b.amount,0);
+    return{cl,cfg,attended,owed,gap:owed-logged};
+  }):[];
+
+  const addDraft=cl=>{const g=suggestions.find(s=>s.cl.id===cl.id);if(!g)return;const entry={id:Date.now(),clientId:cl.id,clientName:cl.name,month:currentMonth,type:"meeting",amount:g.gap,note:`${g.cfg.label} · ${g.attended} meetings in ${fmtMonth(currentMonth)}`,status:"draft",createdAt:todayStr(),invoicedDate:null,paidDate:null};onSave({...data,clientInvoices:[entry,...invoices]});};
+  const saveDeal=()=>{
+    if(!dealForm.clientId||!dealForm.amount)return;
+    const cl=data.clients.find(c=>c.id===Number(dealForm.clientId));
+    const cfg=getClientCommConfig(Number(dealForm.clientId),cl?.name||"");
+    let commAmt=0;
+    if(cfg?.type==="dealPercent")commAmt=Number(dealForm.amount)*cfg.rate;
+    else if(cfg?.type==="mixed")commAmt=Math.min(Number(dealForm.amount)*(cfg.dealRate||0),cfg.dealCap||Infinity);
+    else if(Number(dealForm.clientId)===3){const r=calcGRIDRate(cl?.startDate,Number(dealForm.amount));commAmt=Number(dealForm.amount)*r.rate;}
+    else if(cfg?.dealFixed)commAmt=cfg.dealFixed;
+    const month=dealForm.date?.slice(0,7)||currentMonth;
+    const entry={id:Date.now(),clientId:Number(dealForm.clientId),clientName:cl?.name||"",month,type:"deal",amount:Math.round(commAmt),note:`Closed won: £${Number(dealForm.amount).toLocaleString()} deal. ${dealForm.note||""}`.trim(),status:"draft",createdAt:todayStr(),invoicedDate:null,paidDate:null,dealValue:Number(dealForm.amount)};
+    onSave({...data,clientInvoices:[entry,...invoices],closedWonDeals:[{...dealForm,id:Date.now()+1,clientId:Number(dealForm.clientId),amount:Number(dealForm.amount),clientName:cl?.name||""},...closedWon]});
+    setShowDeal(false);setDealForm({clientId:"",amount:"",date:"",note:""});
+  };
+  const saveMargin=()=>{
+    if(!marginForm.margin)return;
+    const amount=Math.round(Number(marginForm.margin)*0.5);
+    const month=marginForm.date?.slice(0,7)||currentMonth;
+    const entry={id:Date.now(),clientId:5,clientName:"Phoenix Maxwell",month,type:"margin",amount,note:`50% of £${Number(marginForm.margin).toLocaleString()} margin. ${marginForm.note||""}`.trim(),status:"draft",createdAt:todayStr(),invoicedDate:null,paidDate:null};
+    onSave({...data,clientInvoices:[entry,...invoices]});
+    setShowMargin(false);setMarginForm({margin:"",date:currentMonth+"-01",note:""});
+  };
+  const saveInvoice=()=>{
+    if(!invoiceForm.clientId||!invoiceForm.amount)return;
+    const cl=data.clients.find(c=>c.id===Number(invoiceForm.clientId));
+    const entry={id:Date.now(),clientId:Number(invoiceForm.clientId),clientName:cl?.name||"",month:invoiceForm.month,type:invoiceForm.type,amount:Number(invoiceForm.amount),note:invoiceForm.note,status:"draft",createdAt:todayStr(),invoicedDate:null,paidDate:null};
+    onSave({...data,clientInvoices:[entry,...invoices]});
+    setShowAdd(false);setInvoiceForm({clientId:"",month:currentMonth,type:"meeting",amount:"",note:""});
+  };
+
+  return <div>
+    <div style={{...S.row,justifyContent:"space-between",marginBottom:4}}>
+      <div style={S.pt}>Client Commissions</div>
+      <div style={S.row}>
+        <button style={{...S.btn(),fontSize:12}} onClick={()=>setShowMargin(true)}>+ Phoenix Maxwell margin</button>
+        <button style={{...S.btn(),fontSize:12}} onClick={()=>setShowDeal(true)}>+ Closed-won deal</button>
+        <button style={S.btn("p")} onClick={()=>setShowAdd(true)}>+ Add entry</button>
+      </div>
+    </div>
+    <div style={S.ps}>What Momentum is owed by clients · Draft → Raise invoice → Mark paid · Hannah and Gen only</div>
+    <div style={S.g(4)}><Met label="Total invoiced" value={`£${totalInvoiced.toLocaleString()}`} color={BRAND}/><Met label="Total paid" value={`£${totalPaid.toLocaleString()}`} color="#0F6E56"/><Met label="Outstanding (invoiced)" value={`£${totalOutstanding.toLocaleString()}`} color="#854F0B"/><Met label="Draft (not yet invoiced)" value={`£${totalDraft.toLocaleString()}`}/></div>
+
+    <div style={S.card}>
+      <div style={{...S.row,justifyContent:"space-between",marginBottom:16}}><div style={S.ct}>Monthly view</div><select style={{...S.sel,width:"auto"}} value={selectedMonth} onChange={e=>setSelectedMonth(e.target.value)}>{months.map(m=><option key={m} value={m}>{fmtMonth(m)}</option>)}</select></div>
+
+      {suggestions.length>0&&<div style={{padding:"12px 14px",background:BL,border:`1px solid ${BRAND}30`,borderRadius:8,marginBottom:16}}>
+        <div style={{fontSize:12,fontWeight:600,color:BRAND,marginBottom:8}}>Suggested for {fmtMonth(currentMonth)}</div>
+        {suggestions.map(({cl,cfg,gap})=><div key={cl.id} style={{...S.row,justifyContent:"space-between",marginBottom:6}}>
+          <div style={{fontSize:13}}>{cl.name} — <span style={{color:"var(--color-text-secondary)"}}>{cfg.label}</span> → <strong>£{gap.toLocaleString()} owed</strong></div>
+          <button style={{...S.btn("p"),fontSize:11,padding:"3px 10px"}} onClick={()=>addDraft(cl)}>Add draft</button>
+        </div>)}
+      </div>}
+
+      {monthInvoices.length===0&&<div style={{fontSize:12,color:"var(--color-text-tertiary)",padding:"12px 0"}}>No entries for {fmtMonth(selectedMonth)}.</div>}
+      {monthInvoices.length>0&&<table style={S.tbl}>
+        <thead><tr><th style={S.th}>Client</th><th style={S.th}>Type</th><th style={S.th}>Amount</th><th style={S.th}>Note</th><th style={S.th}>Status</th><th style={S.th}>Invoiced</th><th style={S.th}>Paid</th><th style={S.th}>Actions</th></tr></thead>
+        <tbody>{monthInvoices.map(inv=><tr key={inv.id}>
+          <td style={{...S.td,fontWeight:500}}>{inv.clientName}</td>
+          <td style={S.td}><span style={{fontSize:11,background:"#f0f0f0",padding:"2px 8px",borderRadius:10,color:"#555",fontWeight:500}}>{inv.type}</span></td>
+          <td style={{...S.td,fontWeight:600,color:BRAND}}>£{inv.amount.toLocaleString()}</td>
+          <td style={{...S.td,fontSize:12,color:"var(--color-text-secondary)",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{inv.note||"—"}</td>
+          <td style={S.td}><span style={statusStyle(inv.status)}>{inv.status}</span></td>
+          <td style={{...S.td,fontSize:11,color:"var(--color-text-tertiary)"}}>{inv.invoicedDate?fmt(inv.invoicedDate):"—"}</td>
+          <td style={{...S.td,fontSize:11,color:"var(--color-text-tertiary)"}}>{inv.paidDate?fmt(inv.paidDate):"—"}</td>
+          <td style={S.td}><div style={S.row}>
+            {inv.status==="draft"&&<button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:BD}} onClick={()=>updateStatus(inv.id,"invoiced")}>Raise invoice</button>}
+            {inv.status==="invoiced"&&<button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:"#0F6E56"}} onClick={()=>updateStatus(inv.id,"paid")}>Mark paid</button>}
+            {inv.status==="paid"&&<span style={{fontSize:11,color:"#0F6E56"}}>✓ {fmt(inv.paidDate)}</span>}
+            <button style={{background:"none",border:"none",cursor:"pointer",color:"#A32D2D",fontSize:14,padding:"2px 4px"}} onClick={()=>{if(window.confirm("Delete?"))onSave({...data,clientInvoices:invoices.filter(i=>i.id!==inv.id)});}}>×</button>
+          </div></td>
+        </tr>)}</tbody>
+      </table>}
+      {monthInvoices.length>0&&<div style={{...S.row,justifyContent:"flex-end",gap:16,marginTop:12,paddingTop:12,borderTop:"0.5px solid var(--color-border-tertiary)"}}>
+        <span style={{fontSize:13}}>Month total: <strong>£{monthInvoices.reduce((a,b)=>a+b.amount,0).toLocaleString()}</strong></span>
+        <span style={{fontSize:13,color:"#854F0B"}}>Invoiced: <strong>£{monthInvoices.filter(i=>i.status==="invoiced").reduce((a,b)=>a+b.amount,0).toLocaleString()}</strong></span>
+        <span style={{fontSize:13,color:"#0F6E56"}}>Paid: <strong>£{monthInvoices.filter(i=>i.status==="paid").reduce((a,b)=>a+b.amount,0).toLocaleString()}</strong></span>
+      </div>}
+    </div>
+
+    {/* All-time by client */}
+    <div style={S.card}>
+      <div style={S.ct}>All-time by client</div>
+      <table style={S.tbl}>
+        <thead><tr><th style={S.th}>Client</th><th style={S.th}>Commission type</th><th style={S.th}>Total invoiced</th><th style={S.th}>Paid</th><th style={S.th}>Outstanding</th></tr></thead>
+        <tbody>{data.clients.filter(cl=>getClientCommConfig(cl.id,cl.name)).map(cl=>{const clInvs=invoices.filter(i=>i.clientId===cl.id);const total=clInvs.reduce((a,b)=>a+b.amount,0);if(total===0)return null;const paid=clInvs.filter(i=>i.status==="paid").reduce((a,b)=>a+b.amount,0);const out=clInvs.filter(i=>i.status==="invoiced").reduce((a,b)=>a+b.amount,0);return <tr key={cl.id}><td style={{...S.td,fontWeight:500}}>{cl.name}</td><td style={{...S.td,fontSize:12,color:"var(--color-text-secondary)"}}>{getClientCommConfig(cl.id,cl.name)?.label}</td><td style={{...S.td,fontWeight:500}}>£{total.toLocaleString()}</td><td style={{...S.td,color:"#0F6E56",fontWeight:500}}>£{paid.toLocaleString()}</td><td style={{...S.td,color:out>0?"#854F0B":"var(--color-text-tertiary)",fontWeight:out>0?500:400}}>£{out.toLocaleString()}</td></tr>;})}
+        </tbody>
+      </table>
+    </div>
+
+    {/* Commission rules reference */}
+    <div style={{...S.card,background:"var(--color-background-secondary)"}}>
+      <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>Contract reference</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 24px"}}>
+        {[["JGW","£150/attended meeting"],["Laser Red","£150/attended meeting"],["Guessworks","£250/attended + £750/closed won"],["Phoenix Maxwell","50% of monthly profit margin"],["Presented","8% on closed-won"],["GRID","8%/6% tiered months 1-6 · 10%/8% month 7+"],["Projectory","£75/attended meeting"],["Beaumonde","£150/attended + 10% closed-won (capped £2k/deal)"],["Mongoose","£150/attended meeting"]].map(([cl,rule])=>
+          <div key={cl} style={{fontSize:12,padding:"3px 0",borderBottom:"0.5px solid var(--color-border-tertiary)"}}><strong>{cl}:</strong> <span style={{color:"var(--color-text-secondary)"}}>{rule}</span></div>
+        )}
+      </div>
+    </div>
+
+    {showAdd&&<div style={S.modal} onClick={e=>e.target===e.currentTarget&&setShowAdd(false)}>
+      <div style={S.mbox}>
+        <div style={{fontSize:15,fontWeight:600,marginBottom:4,color:"#111"}}>Add commission entry</div>
+        <div style={{fontSize:12,color:"#888",marginBottom:16}}>Creates a draft. Raise invoice when ready to bill, mark paid when received.</div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Client</label><select style={msel()} value={invoiceForm.clientId} onChange={e=>setInvoiceForm({...invoiceForm,clientId:e.target.value})}><option value="">Select client…</option>{data.clients.filter(cl=>getClientCommConfig(cl.id,cl.name)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Month</label><select style={msel()} value={invoiceForm.month} onChange={e=>setInvoiceForm({...invoiceForm,month:e.target.value})}>{months.map(m=><option key={m} value={m}>{fmtMonth(m)}</option>)}</select></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Type</label><select style={msel()} value={invoiceForm.type} onChange={e=>setInvoiceForm({...invoiceForm,type:e.target.value})}><option value="meeting">Meeting-based</option><option value="deal">Closed-won deal</option><option value="margin">Monthly margin</option><option value="other">Other</option></select></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Amount (£)</label><input style={minp()} type="number" value={invoiceForm.amount} onChange={e=>setInvoiceForm({...invoiceForm,amount:e.target.value})}/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Note</label><input style={minp()} value={invoiceForm.note} onChange={e=>setInvoiceForm({...invoiceForm,note:e.target.value})}/></div>
+        <div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:20}}><button style={S.btn()} onClick={()=>setShowAdd(false)}>Cancel</button><button style={S.btn("p")} onClick={saveInvoice}>Add draft</button></div>
+      </div>
+    </div>}
+
+    {showDeal&&<div style={S.modal} onClick={e=>e.target===e.currentTarget&&setShowDeal(false)}>
+      <div style={S.mbox}>
+        <div style={{fontSize:15,fontWeight:600,marginBottom:4,color:"#111"}}>Log closed-won deal</div>
+        <div style={{fontSize:12,color:"#888",marginBottom:16}}>Commission calculated from contract rules. Creates a draft entry.</div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Client</label><select style={msel()} value={dealForm.clientId} onChange={e=>setDealForm({...dealForm,clientId:e.target.value})}><option value="">Select client…</option>{data.clients.filter(cl=>getClientCommConfig(cl.id,cl.name)).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Deal value (£)</label><input style={minp()} type="number" value={dealForm.amount} onChange={e=>setDealForm({...dealForm,amount:e.target.value})} placeholder="e.g. 15000"/></div>
+        {dealForm.clientId&&dealForm.amount&&(()=>{
+          const cl=data.clients.find(c=>c.id===Number(dealForm.clientId));
+          const cfg=getClientCommConfig(Number(dealForm.clientId),cl?.name||"");if(!cfg)return null;
+          let preview=0,label="";
+          if(cfg.type==="dealPercent"){preview=Number(dealForm.amount)*cfg.rate;label=`${cfg.rate*100}%`;}
+          else if(cfg.type==="mixed"&&cfg.dealRate){preview=Math.min(Number(dealForm.amount)*cfg.dealRate,cfg.dealCap||Infinity);label=`${cfg.dealRate*100}% capped £${(cfg.dealCap||0).toLocaleString()}`;}
+          else if(cfg.dealFixed){preview=cfg.dealFixed;label=`£${cfg.dealFixed} fixed`;}
+          else if(Number(dealForm.clientId)===3){const r=calcGRIDRate(cl?.startDate,Number(dealForm.amount));preview=Number(dealForm.amount)*r.rate;label=r.label;}
+          if(!preview)return null;
+          return <div style={{padding:"10px 12px",background:"#E1F5EE",borderRadius:8,marginBottom:12,fontSize:13}}><strong>Commission: £{Math.round(preview).toLocaleString()}</strong> ({label})</div>;
+        })()}
+        <div style={{marginBottom:12}}><label style={mlbl()}>Date closed</label><input style={minp()} type="date" value={dealForm.date} onChange={e=>setDealForm({...dealForm,date:e.target.value})}/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Note</label><input style={minp()} value={dealForm.note} onChange={e=>setDealForm({...dealForm,note:e.target.value})}/></div>
+        <div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:20}}><button style={S.btn()} onClick={()=>setShowDeal(false)}>Cancel</button><button style={S.btn("p")} onClick={saveDeal}>Log deal</button></div>
+      </div>
+    </div>}
+
+    {showMargin&&<div style={S.modal} onClick={e=>e.target===e.currentTarget&&setShowMargin(false)}>
+      <div style={S.mbox}>
+        <div style={{fontSize:15,fontWeight:600,marginBottom:4,color:"#111"}}>Phoenix Maxwell — monthly margin</div>
+        <div style={{fontSize:12,color:"#888",marginBottom:16}}>Enter this month's profit margin. We receive 50%.</div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Month</label><input style={minp()} type="month" value={marginForm.date?.slice(0,7)||currentMonth} onChange={e=>setMarginForm({...marginForm,date:e.target.value+"-01"})}/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Monthly profit margin (£)</label><input style={minp()} type="number" value={marginForm.margin} onChange={e=>setMarginForm({...marginForm,margin:e.target.value})} placeholder="e.g. 1000"/></div>
+        {marginForm.margin&&<div style={{padding:"10px 12px",background:"#E1F5EE",borderRadius:8,marginBottom:12,fontSize:13}}><strong>Our commission: £{(Number(marginForm.margin)*0.5).toLocaleString()}</strong></div>}
+        <div style={{marginBottom:12}}><label style={mlbl()}>Note</label><input style={minp()} value={marginForm.note} onChange={e=>setMarginForm({...marginForm,note:e.target.value})} placeholder="e.g. Contract £5k/mo, margin £1k"/></div>
+        <div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:20}}><button style={S.btn()} onClick={()=>setShowMargin(false)}>Cancel</button><button style={S.btn("p")} onClick={saveMargin}>Add draft</button></div>
+      </div>
+    </div>}
+  </div>;
+}
+
+// ── Leave ─────────────────────────────────────────────────────────────────────
+function Leave({user,data,onSave}){
+  const adm=user.role==="admin";
+  const[showAdd,setShowAdd]=useState(false);
+  const[editLeave,setEditLeave]=useState(null);
+  const[form,setForm]=useState({type:"holiday",startDate:"",endDate:"",days:"",reason:""});
+  const blank={type:"holiday",startDate:"",endDate:"",days:"",reason:""};
+  const respond=(id,st)=>onSave({...data,leaveRequests:data.leaveRequests.map(l=>l.id===id?{...l,status:st}:l)});
+  const deleteLeave=id=>{if(window.confirm("Delete this leave request?"))onSave({...data,leaveRequests:data.leaveRequests.filter(l=>l.id!==id)});};
+  const saveEdit=()=>{onSave({...data,leaveRequests:data.leaveRequests.map(l=>l.id===editLeave.id?{...editLeave,days:Number(editLeave.days)}:l)});setEditLeave(null);};
+  const canEditOrDelete=l=>adm||(l.employee===user.id&&l.status==="pending");
+  const reqs=adm?[...data.leaveRequests].sort((a,b)=>new Date(b.startDate)-new Date(a.startDate)):[...data.leaveRequests].filter(l=>l.status==="approved"||l.employee===user.id).sort((a,b)=>new Date(b.startDate)-new Date(a.startDate));
+  const myA=data.leaveRequests.filter(l=>l.employee===user.id&&l.type==="holiday"&&l.status==="approved").reduce((a,b)=>a+b.days,0);
+  const LeaveForm=({val,setVal,onCancel,onSubmit,title})=><div style={S.modal} onClick={e=>e.target===e.currentTarget&&onCancel()}>
+    <div style={S.mbox}>
+      <div style={{fontSize:15,fontWeight:600,marginBottom:16,color:"#111"}}>{title}</div>
+      {adm&&<div style={{marginBottom:12}}><label style={mlbl()}>Employee</label><select style={msel()} value={val.employee||user.id} onChange={e=>setVal({...val,employee:e.target.value})}>{USERS.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></div>}
+      <div style={{marginBottom:12}}><label style={mlbl()}>Type</label><select style={msel()} value={val.type} onChange={e=>setVal({...val,type:e.target.value})}><option value="holiday">Holiday</option><option value="sick">Sick</option></select></div>
+      <div style={{marginBottom:12}}><label style={mlbl()}>Start date</label><input style={minp()} type="date" value={val.startDate} onChange={e=>setVal({...val,startDate:e.target.value})}/></div>
+      <div style={{marginBottom:12}}><label style={mlbl()}>End date</label><input style={minp()} type="date" value={val.endDate} onChange={e=>setVal({...val,endDate:e.target.value})}/></div>
+      <div style={{marginBottom:12}}><label style={mlbl()}>Number of days</label><input style={minp()} type="number" value={val.days} onChange={e=>setVal({...val,days:e.target.value})}/></div>
+      <div style={{marginBottom:12}}><label style={mlbl()}>Reason (optional)</label><input style={minp()} value={val.reason||""} onChange={e=>setVal({...val,reason:e.target.value})}/></div>
+      {adm&&<div style={{marginBottom:12}}><label style={mlbl()}>Status</label><select style={msel()} value={val.status||"pending"} onChange={e=>setVal({...val,status:e.target.value})}><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></div>}
+      <div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:20}}>
+        <button style={S.btn()} onClick={onCancel}>Cancel</button>
+        <button style={S.btn("p")} onClick={onSubmit}>Save</button>
+      </div>
+    </div>
+  </div>;
+  return <div>
+    <div style={{...S.row,justifyContent:"space-between",marginBottom:4}}><div style={S.pt}>Leave</div><button style={S.btn("p")} onClick={()=>{setForm(blank);setShowAdd(true);}}>Request leave</button></div>
+    <div style={S.ps}>{adm?"Review and manage leave requests — edit or delete any entry":"Your leave and team approved leave"}</div>
+    <div style={S.g(3)}>{adm?<><Met label="Pending" value={data.leaveRequests.filter(l=>l.status==="pending").length}/><Met label="Approved holiday days" value={data.leaveRequests.filter(l=>l.type==="holiday"&&l.status==="approved").reduce((a,b)=>a+b.days,0)}/><Met label="Sick days" value={data.leaveRequests.filter(l=>l.type==="sick"&&l.status==="approved").reduce((a,b)=>a+b.days,0)}/></>:<><Met label="My approved holiday" value={`${myA} days`}/><Met label="Holiday remaining" value={`${28-myA} days`}/><Met label="Sick days" value={data.leaveRequests.filter(l=>l.employee===user.id&&l.type==="sick"&&l.status==="approved").reduce((a,b)=>a+b.days,0)}/></>}</div>
+    <div style={S.card}><table style={S.tbl}>
+      <thead><tr><th style={S.th}>Employee</th><th style={S.th}>Type</th><th style={S.th}>From</th><th style={S.th}>To</th><th style={S.th}>Days</th>{adm&&<th style={S.th}>Reason</th>}<th style={S.th}>Status</th><th style={S.th}>Actions</th></tr></thead>
+      <tbody>{reqs.map(l=>{const emp=getUser(l.employee);return <tr key={l.id}>
+        <td style={S.td}><div style={S.row}><div style={{...S.av(emp?.color||"#888"),width:20,height:20,fontSize:9}}>{emp?.ini}</div>{emp?.name}</div></td>
+        <td style={S.td}><span style={S.bdg(l.type)}>{l.type}</span></td>
+        <td style={S.td}>{fmt(l.startDate)}</td><td style={S.td}>{fmt(l.endDate)}</td><td style={S.td}>{l.days}</td>
+        {adm&&<td style={{...S.td,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.reason||"—"}</td>}
+        <td style={S.td}><span style={S.bdg(l.status)}>{l.status}</span></td>
+        <td style={S.td}><div style={S.row}>
+          {adm&&l.status==="pending"&&<><button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:"#3B6D11"}} onClick={()=>respond(l.id,"approved")}>Approve</button><button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={()=>respond(l.id,"rejected")}>Reject</button></>}
+          {canEditOrDelete(l)&&<button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:BRAND}} onClick={()=>setEditLeave({...l})}>Edit</button>}
+          {canEditOrDelete(l)&&<button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={()=>deleteLeave(l.id)}>Delete</button>}
+        </div></td>
+      </tr>;})}</tbody>
+    </table></div>
+    {showAdd&&<LeaveForm val={{...form,employee:user.id}} setVal={v=>setForm(v)} title="Request leave" onCancel={()=>setShowAdd(false)} onSubmit={()=>{if(!form.startDate||!form.days)return;onSave({...data,leaveRequests:[{...form,id:Date.now(),employee:adm?(form.employee||user.id):user.id,days:Number(form.days),status:adm?"approved":"pending"},...data.leaveRequests]});setShowAdd(false);setForm(blank);}}/>}
+    {editLeave&&<LeaveForm val={editLeave} setVal={setEditLeave} title="Edit leave" onCancel={()=>setEditLeave(null)} onSubmit={saveEdit}/>}
+  </div>;
+}
+
+// ── Training ──────────────────────────────────────────────────────────────────
+function Training({user,data,onSave}){
+  const adm=user.role==="admin"||user.role==="ops";const[sel,setSel]=useState(null);const[showAdd,setShowAdd]=useState(false);const[editing,setEditing]=useState(false);const[editForm,setEditForm]=useState(null);const[form,setForm]=useState({title:"",cat:"Sales",desc:"",video:"",content:""});
+  if(sel){
+    const t=data.trainings.find(x=>x.id===sel.id);if(!t){setSel(null);return null;}
+    const done=(t.done||[]).some(x=>x.uid===user.id);const eu=embedUrl(t.video);
+    if(editing&&editForm)return <div><button style={{...S.btn(),marginBottom:16,fontSize:12}} onClick={()=>setEditing(false)}>← Cancel</button><div style={S.pt}>Edit module</div><div style={S.card}><div style={{marginBottom:12}}><label style={S.lbl}>Title</label><input style={S.inp} value={editForm.title} onChange={e=>setEditForm({...editForm,title:e.target.value})}/></div><div style={{marginBottom:12}}><label style={S.lbl}>Category</label><select style={S.sel} value={editForm.cat} onChange={e=>setEditForm({...editForm,cat:e.target.value})}><option>Sales</option><option>Operations</option><option>Culture</option></select></div><div style={{marginBottom:12}}><label style={S.lbl}>Description</label><input style={S.inp} value={editForm.desc} onChange={e=>setEditForm({...editForm,desc:e.target.value})}/></div><div style={{marginBottom:12}}><label style={S.lbl}>Video URL</label><input style={S.inp} value={editForm.video} onChange={e=>setEditForm({...editForm,video:e.target.value})}/></div><div style={{marginBottom:12}}><label style={S.lbl}>Content</label><textarea style={{...S.inp,height:240,resize:"vertical",fontFamily:"monospace",fontSize:12}} value={editForm.content} onChange={e=>setEditForm({...editForm,content:e.target.value})}/></div><div style={{...S.row,justifyContent:"flex-end",gap:8}}><button style={S.btn()} onClick={()=>setEditing(false)}>Cancel</button><button style={S.btn("p")} onClick={()=>{onSave({...data,trainings:data.trainings.map(x=>x.id===t.id?{...x,...editForm}:x)});setEditing(false);}}>Save</button></div></div></div>;
+    return <div><button style={{...S.btn(),marginBottom:16,fontSize:12}} onClick={()=>setSel(null)}>← Back</button><div style={{...S.row,justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:8}}><div><div style={S.pt}>{t.title}</div><div style={{marginTop:4}}><span style={S.bdg(t.cat)}>{t.cat}</span></div></div><div style={S.row}>{adm&&<button style={{...S.btn(),fontSize:12}} onClick={()=>{setEditForm({...t});setEditing(true);}}>Edit</button>}{!done?<button style={S.btn("p")} onClick={()=>onSave({...data,trainings:data.trainings.map(x=>x.id===t.id?{...x,done:[...(x.done||[]),{uid:user.id,date:todayStr()}]}:x)})}>Mark complete</button>:<span style={{fontSize:12,color:"#3B6D11",fontWeight:500}}>✓ Completed</span>}</div></div>{eu&&<div style={{...S.card,padding:0,overflow:"hidden",marginBottom:16}}><iframe src={eu} style={{width:"100%",height:360,border:"none",display:"block"}} allowFullScreen/></div>}<div style={S.card}><Md text={t.content}/></div>{adm&&<div style={S.card}><div style={S.ct}>Completion</div><div style={S.row}>{USERS.filter(u=>u.role!=="admin"&&u.role!=="ops").map(u=>{const d=(t.done||[]).some(x=>x.uid===u.id);return <div key={u.id} style={{...S.row,gap:6,marginRight:20}}><div style={S.av(u.color)}>{u.ini}</div><div><div style={{fontSize:12,fontWeight:500}}>{u.name}</div><div style={{fontSize:11,color:d?"#3B6D11":"var(--color-text-tertiary)"}}>{d?"Complete":"Not started"}</div></div></div>;})}</div></div>}</div>;
+  }
+  return <div>
+    <div style={{...S.row,justifyContent:"space-between",marginBottom:4}}><div style={S.pt}>Training</div>{adm&&<button style={S.btn("p")} onClick={()=>setShowAdd(true)}>+ Add module</button>}</div>
+    <div style={S.ps}>Sales playbooks, system guides and company culture</div>
+    <div style={S.g(3)}>{data.trainings.map(t=>{const done=(t.done||[]).some(x=>x.uid===user.id);return <div key={t.id} style={{...S.card,cursor:"pointer",marginBottom:0}} onClick={()=>setSel(t)}><div style={{...S.row,justifyContent:"space-between",marginBottom:8}}><span style={S.bdg(t.cat)}>{t.cat}</span>{done&&<span style={{fontSize:11,color:"#3B6D11"}}>✓</span>}</div><div style={{fontSize:14,fontWeight:500,marginBottom:4}}>{t.title}</div><div style={{fontSize:12,color:"var(--color-text-tertiary)",marginBottom:12,lineHeight:1.5}}>{t.desc}</div>{adm&&<div style={{fontSize:11,color:"var(--color-text-tertiary)",marginBottom:8}}>{(t.done||[]).length}/{USERS.filter(u=>u.role!=="admin"&&u.role!=="ops").length} completed</div>}<button style={{...S.btn(),fontSize:11,padding:"4px 10px"}} onClick={e=>{e.stopPropagation();setSel(t);}}>Open →</button></div>;})}
+    </div>
+    {showAdd&&<div style={S.modal} onClick={e=>e.target===e.currentTarget&&setShowAdd(false)}><div style={S.mbox}><div style={{fontSize:15,fontWeight:600,marginBottom:16,color:"#111"}}>Add module</div><div style={{marginBottom:12}}><label style={mlbl()}>Title</label><input style={minp()} value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></div><div style={{marginBottom:12}}><label style={mlbl()}>Category</label><select style={msel()} value={form.cat} onChange={e=>setForm({...form,cat:e.target.value})}><option>Sales</option><option>Operations</option><option>Culture</option></select></div><div style={{marginBottom:12}}><label style={mlbl()}>Description</label><input style={minp()} value={form.desc} onChange={e=>setForm({...form,desc:e.target.value})}/></div><div style={{marginBottom:12}}><label style={mlbl()}>Video URL</label><input style={minp()} value={form.video} onChange={e=>setForm({...form,video:e.target.value})}/></div><div style={{marginBottom:12}}><label style={mlbl()}>Content</label><textarea style={{...minp(),height:100,resize:"vertical"}} value={form.content} onChange={e=>setForm({...form,content:e.target.value})}/></div><div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:16}}><button style={S.btn()} onClick={()=>setShowAdd(false)}>Cancel</button><button style={S.btn("p")} onClick={()=>{if(!form.title)return;onSave({...data,trainings:[{...form,id:Date.now(),done:[]},...data.trainings]});setShowAdd(false);setForm({title:"",cat:"Sales",desc:"",video:"",content:""});}}>Add</button></div></div></div>}
+  </div>;
+}
+
+// ── Documents ─────────────────────────────────────────────────────────────────
+function Documents({user,data,onSave}){
+  const adm=user.role==="admin"||user.role==="ops";const[sel,setSel]=useState(null);const[showAdd,setShowAdd]=useState(false);const[form,setForm]=useState({title:"",cat:"Operations",content:"",driveUrl:""});const[search,setSearch]=useState("");
+  const filtDocs=data.documents.filter(d=>!search||d.title.toLowerCase().includes(search.toLowerCase()));
+  if(sel){const doc=data.documents.find(x=>x.id===sel);if(!doc){setSel(null);return null;}return <div><button style={{...S.btn(),marginBottom:16,fontSize:12}} onClick={()=>setSel(null)}>← Back</button><div style={{...S.row,justifyContent:"space-between",marginBottom:16}}><div><div style={S.pt}>{doc.title}</div><div style={{...S.row,gap:8,marginTop:4}}><span style={S.bdg(doc.cat)}>{doc.cat}</span><span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>Updated {fmt(doc.updated)}</span></div></div><div style={S.row}>{doc.driveUrl&&<a href={doc.driveUrl} target="_blank" rel="noreferrer" style={{...S.btn(),fontSize:12,textDecoration:"none",color:"#1967D2",display:"inline-flex",alignItems:"center",gap:4}}><span style={{fontSize:13}}>↗</span> Open in Drive</a>}{adm&&<button style={{...S.btn(),color:"#A32D2D",fontSize:12}} onClick={()=>{onSave({...data,documents:data.documents.filter(x=>x.id!==sel)});setSel(null);}}>Delete</button>}</div></div><div style={S.card}><Md text={doc.content}/></div></div>;}
+  return <div>
+    <div style={{...S.row,justifyContent:"space-between",marginBottom:4}}><div style={S.pt}>Documents</div>{adm&&<button style={S.btn("p")} onClick={()=>setShowAdd(true)}>+ Add doc</button>}</div>
+    <div style={S.ps}>Internal policy and process documents · Paste a Google Drive URL to link directly to a Drive doc</div>
+    <input style={{...S.inp,marginBottom:20,maxWidth:320}} placeholder="Search…" value={search} onChange={e=>setSearch(e.target.value)}/>
+    <div style={S.g(2)}>{filtDocs.map(doc=><div key={doc.id} style={{...S.card,marginBottom:0}} onClick={()=>setSel(doc.id)}><div style={{...S.row,justifyContent:"space-between",marginBottom:4}}><span style={S.bdg(doc.cat)}>{doc.cat}</span><span style={{fontSize:11,color:"var(--color-text-tertiary)"}}>{fmt(doc.updated)}</span></div><div style={{fontSize:14,fontWeight:500,marginBottom:8,cursor:"pointer"}}>{doc.title}</div>{doc.driveUrl&&<div style={{fontSize:11,color:"#1967D2",marginBottom:8}}>↗ Google Drive linked</div>}<div style={{...S.row,justifyContent:"space-between"}}><button style={{...S.btn(),fontSize:11,padding:"4px 10px"}} onClick={e=>{e.stopPropagation();setSel(doc.id);}}>Read →</button>{doc.driveUrl&&<a href={doc.driveUrl} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{...S.btn(),fontSize:11,padding:"4px 10px",textDecoration:"none",color:"#1967D2"}}>Open in Drive ↗</a>}{adm&&<button style={{...S.btn(),fontSize:11,padding:"4px 8px",color:"#A32D2D"}} onClick={e=>{e.stopPropagation();onSave({...data,documents:data.documents.filter(x=>x.id!==doc.id)});}}>Remove</button>}</div></div>)}</div>
+    {showAdd&&<div style={S.modal} onClick={e=>e.target===e.currentTarget&&setShowAdd(false)}><div style={S.mbox}><div style={{fontSize:15,fontWeight:600,marginBottom:4,color:"#111"}}>Add document</div><div style={{fontSize:12,color:"#888",marginBottom:16}}>Write content here, or paste a Google Drive URL to link out to an existing Drive document.</div><div style={{marginBottom:12}}><label style={mlbl()}>Title</label><input style={minp()} value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></div><div style={{marginBottom:12}}><label style={mlbl()}>Category</label><select style={msel()} value={form.cat} onChange={e=>setForm({...form,cat:e.target.value})}><option>Operations</option><option>HR</option><option>Finance</option><option>Sales</option></select></div><div style={{marginBottom:12}}><label style={mlbl()}>Google Drive URL (optional)</label><input style={minp()} value={form.driveUrl} onChange={e=>setForm({...form,driveUrl:e.target.value})} placeholder="https://docs.google.com/document/d/…"/></div><div style={{marginBottom:12}}><label style={mlbl()}>Content (optional if Drive URL provided)</label><textarea style={{...minp(),height:120,resize:"vertical"}} value={form.content} onChange={e=>setForm({...form,content:e.target.value})}/></div><div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:16}}><button style={S.btn()} onClick={()=>setShowAdd(false)}>Cancel</button><button style={S.btn("p")} onClick={()=>{if(!form.title)return;onSave({...data,documents:[{...form,id:Date.now(),updated:todayStr()},...data.documents]});setShowAdd(false);setForm({title:"",cat:"Operations",content:"",driveUrl:""});}}>Add</button></div></div></div>}
+  </div>;
+}
+
+// ── Marketing Hub ─────────────────────────────────────────────────────────────
+function ContentCalendar({user,data,onSave}){
+  const adm=user.role==="admin";
+  const today=new Date();
+  const[yr,setYr]=useState(today.getFullYear());
+  const[mo,setMo]=useState(today.getMonth());
+  const[selPost,setSelPost]=useState(null);
+  const[newPostDate,setNewPostDate]=useState(null);
+  const[editing,setEditing]=useState(null);
+  const[form,setForm]=useState({platform:"LinkedIn (personal)",title:"",date:"",status:"draft",body:"",notes:""});
+  const posts=data.marketing?.posts||[];
+  const savePost=p=>onSave({...data,marketing:{...data.marketing,posts:posts.map(x=>x.id===p.id?p:x)}});
+  const openPost=p=>{setEditing({...p});setSelPost(p);};
+  const addPost=()=>{
+    if(!form.title)return;
+    onSave({...data,marketing:{...data.marketing,posts:[{...form,id:Date.now(),reach:0,impressions:0,likes:0,comments:0,shares:0,body:form.body||""},...posts]}});
+    setNewPostDate(null);setForm({platform:"LinkedIn (personal)",title:"",date:"",status:"draft",body:"",notes:""});
+  };
+  const deletePost=id=>onSave({...data,marketing:{...data.marketing,posts:posts.filter(p=>p.id!==id)}});
+
+  const dim=new Date(yr,mo+1,0).getDate();
+  const first=(new Date(yr,mo,1).getDay()+6)%7;
+  const cells=Math.ceil((first+dim)/7)*7;
+  const mName=new Date(yr,mo,1).toLocaleDateString("en-GB",{month:"long",year:"numeric"});
+  const postsThisMonth=posts.filter(p=>p.date&&p.date.startsWith(`${yr}-${String(mo+1).padStart(2,"0")}`));
+  const statusColour={draft:["#F1EFE8","#5F5E5A"],scheduled:[BL,BD],published:["#EAF3DE","#3B6D11"]};
+
+  // Post editor panel
+  if(selPost&&editing){
+    const p=posts.find(x=>x.id===selPost.id)||selPost;
+    const sc=statusColour[editing.status]||statusColour.draft;
+    return <div>
+      <button style={{...S.btn(),marginBottom:16,fontSize:12}} onClick={()=>{setSelPost(null);setEditing(null);}}>← Back to calendar</button>
+      <div style={{...S.row,justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:8}}>
+        <div>
+          <div style={S.pt}>{editing.title||"Untitled post"}</div>
+          <div style={{...S.row,gap:8,marginTop:6}}>
+            <span style={{...S.bdg(editing.status),cursor:"pointer"}}>
+              <select value={editing.status} onChange={e=>setEditing({...editing,status:e.target.value})} style={{background:"none",border:"none",fontSize:11,fontWeight:500,color:"inherit",cursor:"pointer",fontFamily:"inherit",padding:0}}>
+                <option value="draft">draft</option><option value="scheduled">scheduled</option><option value="published">published</option>
+              </select>
+            </span>
+            <span style={{fontSize:12,color:"var(--color-text-tertiary)"}}>{fmt(editing.date)}</span>
+            <span style={{fontSize:11,color:editing.platform.includes("personal")?"#1967D2":"#059669",fontWeight:500}}>{editing.platform.includes("personal")?"Personal":"Company"}</span>
+          </div>
+        </div>
+        <div style={S.row}>
+          {adm&&<button style={{...S.btn(),fontSize:12,color:"#A32D2D"}} onClick={()=>{deletePost(p.id);setSelPost(null);setEditing(null);}}>Delete</button>}
+          <button style={S.btn()} onClick={()=>{setSelPost(null);setEditing(null);}}>Discard</button>
+          <button style={S.btn("p")} onClick={()=>{savePost(editing);setSelPost(null);setEditing(null);}}>Save post</button>
+        </div>
+      </div>
+      <div style={S.g(2)}>
+        <div>
+          <div style={S.card}>
+            <div style={{marginBottom:12}}><label style={S.lbl}>Post title / hook</label><input style={S.inp} value={editing.title} onChange={e=>setEditing({...editing,title:e.target.value})}/></div>
+            <div style={{marginBottom:12}}><label style={S.lbl}>Platform</label><select style={S.sel} value={editing.platform} onChange={e=>setEditing({...editing,platform:e.target.value})}><option>LinkedIn (personal)</option><option>LinkedIn (company)</option></select></div>
+            <div style={{marginBottom:12}}><label style={S.lbl}>Scheduled date</label><input style={S.inp} type="date" value={editing.date} onChange={e=>setEditing({...editing,date:e.target.value})}/></div>
+            <div><label style={S.lbl}>Notes / brief</label><textarea style={{...S.inp,height:80,resize:"vertical"}} value={editing.notes||""} onChange={e=>setEditing({...editing,notes:e.target.value})} placeholder="Angle, target audience, goal…"/></div>
+          </div>
+          {editing.status==="published"&&<div style={S.card}>
+            <div style={{...S.ct,marginBottom:12}}>Performance</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              {[["reach","Reach"],["impressions","Impressions"],["likes","Likes"],["comments","Comments"],["shares","Shares"]].map(([k,l])=>
+                <div key={k}><label style={S.lbl}>{l}</label><input style={S.inp} type="number" value={editing[k]||0} onChange={e=>setEditing({...editing,[k]:Number(e.target.value)})}/></div>
+              )}
+            </div>
+          </div>}
+        </div>
+        <div style={S.card}>
+          <div style={{...S.ct,marginBottom:8}}>Post content</div>
+          <div style={{fontSize:12,color:"var(--color-text-tertiary)",marginBottom:10}}>Write your full post here. This is your drafting space.</div>
+          <textarea style={{...S.inp,height:420,resize:"vertical",fontSize:13,lineHeight:1.75,fontFamily:"inherit"}} value={editing.body||""} onChange={e=>setEditing({...editing,body:e.target.value})} placeholder="Start writing your post…&#10;&#10;Hook first. No 'I'. Under 250 words for best performance."/>
+          {editing.body&&<div style={{fontSize:11,color:editing.body.length>1500?"#A32D2D":"var(--color-text-tertiary)",marginTop:6,textAlign:"right"}}>{editing.body.length} chars · ~{Math.round(editing.body.split(/\s+/).length)} words</div>}
+        </div>
+      </div>
+    </div>;
+  }
+
+  return <div>
+    <div style={{...S.row,justifyContent:"space-between",marginBottom:4}}>
+      <div style={S.pt}>Content Calendar</div>
+      <div style={S.row}>
+        <button style={{...S.btn(),padding:"6px 10px"}} onClick={()=>{if(mo===0){setMo(11);setYr(y=>y-1);}else setMo(m=>m-1);}}>←</button>
+        <span style={{fontSize:14,fontWeight:500,minWidth:150,textAlign:"center"}}>{mName}</span>
+        <button style={{...S.btn(),padding:"6px 10px"}} onClick={()=>{if(mo===11){setMo(0);setYr(y=>y+1);}else setMo(m=>m+1);}}>→</button>
+      </div>
+    </div>
+    <div style={S.ps}>Click any day to schedule a post · Click a post to edit or write content · {postsThisMonth.length} post{postsThisMonth.length!==1?"s":""} this month</div>
+
+    {/* Legend */}
+    <div style={{...S.row,marginBottom:12,gap:16}}>
+      {Object.entries({draft:"Draft",scheduled:"Scheduled",published:"Published"}).map(([s,l])=>{const[bg,co]=statusColour[s];return <div key={s} style={S.row}><div style={{width:10,height:10,borderRadius:"50%",background:co}}/><span style={{fontSize:11,color:"var(--color-text-secondary)"}}>{l}</span></div>;})}
+    </div>
+
+    <div style={{background:"var(--color-background-primary)",border:"0.5px solid var(--color-border-tertiary)",borderRadius:12,overflow:"hidden",marginBottom:16}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",borderBottom:"0.5px solid var(--color-border-tertiary)"}}>
+        {["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=><div key={d} style={{padding:"8px 0",textAlign:"center",fontSize:11,fontWeight:600,color:"var(--color-text-tertiary)",textTransform:"uppercase",letterSpacing:"0.05em"}}>{d}</div>)}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+        {Array.from({length:cells},(_,i)=>{
+          const dn=i-first+1;const valid=dn>=1&&dn<=dim;
+          const ds=valid?`${yr}-${String(mo+1).padStart(2,"0")}-${String(dn).padStart(2,"0")}`:"";
+          const isToday=valid&&dn===today.getDate()&&mo===today.getMonth()&&yr===today.getFullYear();
+          const isWknd=(i%7)>=5;
+          const dayPosts=valid?posts.filter(p=>p.date===ds):[];
+          return <div key={i} onClick={()=>{if(valid&&adm){setForm(f=>({...f,date:ds}));setNewPostDate(ds);}}} style={{minHeight:100,borderRight:"0.5px solid var(--color-border-tertiary)",borderBottom:"0.5px solid var(--color-border-tertiary)",padding:4,background:valid?(isWknd?"var(--color-background-secondary)":"var(--color-background-primary)"):"var(--color-background-tertiary)",cursor:valid&&adm?"pointer":"default",transition:"background 0.1s"}} onMouseEnter={e=>{if(valid&&adm)e.currentTarget.style.background=isWknd?"#e8e7e3":"#fafaf8";}} onMouseLeave={e=>{if(valid&&adm)e.currentTarget.style.background=valid?(isWknd?"var(--color-background-secondary)":"var(--color-background-primary)"):"var(--color-background-tertiary)";}}>
+            {valid&&<div style={{fontSize:12,fontWeight:isToday?700:400,color:isToday?"#fff":"var(--color-text-secondary)",marginBottom:3,width:22,height:22,borderRadius:"50%",background:isToday?BRAND:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>{dn}</div>}
+            {dayPosts.map(p=>{const[bg,co]=statusColour[p.status]||statusColour.draft;return <div key={p.id} onClick={e=>{e.stopPropagation();openPost(p);}} style={{fontSize:10,padding:"3px 6px",borderRadius:4,background:bg,color:co,fontWeight:500,marginBottom:2,cursor:"pointer",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",borderLeft:`3px solid ${co}`,lineHeight:1.4}}>{p.title||"Untitled"}</div>;})}
+            {valid&&adm&&dayPosts.length===0&&<div style={{fontSize:10,color:"var(--color-border-secondary)",textAlign:"center",marginTop:8}}>+</div>}
+          </div>;
+        })}
+      </div>
+    </div>
+
+    {/* This month list */}
+    {postsThisMonth.length>0&&<div style={S.card}>
+      <div style={S.ct}>Posts this month</div>
+      <table style={S.tbl}><thead><tr><th style={S.th}>Date</th><th style={S.th}>Platform</th><th style={S.th}>Title</th><th style={S.th}>Status</th><th style={S.th}>Words</th><th style={S.th}></th></tr></thead>
+      <tbody>{[...postsThisMonth].sort((a,b)=>a.date>b.date?1:-1).map(p=>{const[bg,co]=statusColour[p.status]||statusColour.draft;const wc=p.body?p.body.split(/\s+/).filter(Boolean).length:0;return <tr key={p.id}>
+        <td style={S.td}>{fmt(p.date)}</td>
+        <td style={S.td}><span style={{fontSize:11,color:p.platform.includes("personal")?"#1967D2":"#059669",fontWeight:500}}>{p.platform.includes("personal")?"Personal":"Company"}</span></td>
+        <td style={{...S.td,fontWeight:500}}>{p.title||<span style={{color:"var(--color-text-tertiary)"}}>Untitled</span>}</td>
+        <td style={S.td}><span style={{...S.bdg(p.status)}}>{p.status}</span></td>
+        <td style={{...S.td,color:wc>0?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{wc>0?wc+" words":"No content yet"}</td>
+        <td style={S.td}><button style={{...S.btn(),fontSize:11,padding:"3px 10px"}} onClick={()=>openPost(p)}>Open →</button></td>
+      </tr>;})}
+      </tbody></table>
+    </div>}
+
+    {/* New post modal */}
+    {newPostDate&&<div style={S.modal} onClick={e=>e.target===e.currentTarget&&setNewPostDate(null)}>
+      <div style={S.mbox}>
+        <div style={{fontSize:15,fontWeight:600,marginBottom:4,color:"#111"}}>New post — {fmt(newPostDate)}</div>
+        <div style={{fontSize:12,color:"#888",marginBottom:16}}>Add the basics here, then open the post to write the full content.</div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Title / hook</label><input style={minp()} autoFocus value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="What's the post about?"/></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Platform</label><select style={msel()} value={form.platform} onChange={e=>setForm({...form,platform:e.target.value})}><option>LinkedIn (personal)</option><option>LinkedIn (company)</option></select></div>
+        <div style={{marginBottom:12}}><label style={mlbl()}>Status</label><select style={msel()} value={form.status} onChange={e=>setForm({...form,status:e.target.value})}><option value="draft">Draft</option><option value="scheduled">Scheduled</option><option value="published">Published</option></select></div>
+        <div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:20}}>
+          <button style={S.btn()} onClick={()=>setNewPostDate(null)}>Cancel</button>
+          <button style={S.btn("p")} onClick={addPost}>Add post</button>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
+function PostPerformance({user,data,onSave}){
+  const adm=user.role==="admin";
+  const now=new Date();
+  const currentWeek=getISOWeek();
+  const allPosts=data.marketing?.posts||[];
+  const published=allPosts.filter(p=>p.status==="published").sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const totalReach=published.reduce((a,p)=>a+p.reach,0);
+  const totalEngage=published.reduce((a,p)=>a+p.likes+p.comments+p.shares,0);
+  const best=published.length?published.reduce((a,b)=>(b.likes+b.comments+b.shares)>(a.likes+a.comments+a.shares)?b:a,published[0]):null;
+  const updPost=(id,ch)=>onSave({...data,marketing:{...data.marketing,posts:allPosts.map(p=>p.id===id?{...p,...ch}:p)}});
+
+  // Weekly LinkedIn stats (followers + leads)
+  const weeklyStats=data.marketing?.weeklyStats||{};
+  const thisWeek=weeklyStats[currentWeek]||{followers:0,leads:0,notes:""};
+  const saveWeek=ch=>{
+    const updated={...weeklyStats,[currentWeek]:{...thisWeek,...ch}};
+    onSave({...data,marketing:{...data.marketing,weeklyStats:updated}});
+  };
+
+  // Sorted weeks for the history table
+  const weekHistory=Object.entries(weeklyStats).sort((a,b)=>b[0]>a[0]?1:-1).slice(0,12);
+
+  // Follower growth chart data
+  const followerHistory=Object.entries(weeklyStats).filter(([,v])=>v.followers>0).sort((a,b)=>a[0]>b[0]?1:-1).slice(-10);
+
+  const[editPostId,setEditPostId]=useState(null);
+  const[editVals,setEditVals]=useState({});
+
+  const openEdit=p=>{setEditPostId(p.id);setEditVals({reach:p.reach||0,impressions:p.impressions||0,likes:p.likes||0,comments:p.comments||0,shares:p.shares||0});};
+  const saveEdit=()=>{updPost(editPostId,editVals);setEditPostId(null);};
+
+  return <div>
+    <div style={S.pt}>Post Performance</div>
+    <div style={S.ps}>Track reach, engagement, followers and LinkedIn leads week by week</div>
+
+    {/* This week panel */}
+    <div style={{...S.card,border:`1px solid ${BRAND}30`,background:`linear-gradient(135deg,${BRAND}08,transparent)`,marginBottom:16}}>
+      <div style={{...S.row,justifyContent:"space-between",marginBottom:12}}>
+        <div style={S.ct}>This week — {currentWeek}</div>
+        {adm&&<div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>Auto-saves as you type</div>}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+        <div>
+          <label style={S.lbl}>LinkedIn followers (current total)</label>
+          <input style={S.inp} type="number" value={thisWeek.followers||""} placeholder="e.g. 2840" disabled={!adm} onChange={e=>saveWeek({followers:Number(e.target.value)})}/>
+          {(()=>{const prev=weekHistory.find(([wk])=>wk!==currentWeek);const prevF=prev?prev[1].followers:0;const diff=(thisWeek.followers||0)-prevF;return prevF>0&&diff!==0?<div style={{fontSize:11,marginTop:3,color:diff>0?"#0F6E56":"#A32D2D",fontWeight:500}}>{diff>0?"↑":"↓"} {Math.abs(diff)} vs last week</div>:null;})()}
+        </div>
+        <div>
+          <label style={S.lbl}>LinkedIn leads this week</label>
+          <input style={S.inp} type="number" value={thisWeek.leads||""} placeholder="e.g. 3" disabled={!adm} onChange={e=>saveWeek({leads:Number(e.target.value)})}/>
+          {(()=>{const prev=weekHistory.find(([wk])=>wk!==currentWeek);const prevL=prev?prev[1].leads:0;const diff=(thisWeek.leads||0)-prevL;return prevL>0&&diff!==0?<div style={{fontSize:11,marginTop:3,color:diff>0?"#0F6E56":"#A32D2D",fontWeight:500}}>{diff>0?"↑":"↓"} {Math.abs(diff)} vs last week</div>:null;})()}
+        </div>
+        <div>
+          <label style={S.lbl}>Notes</label>
+          <input style={S.inp} value={thisWeek.notes||""} placeholder="Any context this week…" disabled={!adm} onChange={e=>saveWeek({notes:e.target.value})}/>
+        </div>
+      </div>
+    </div>
+
+    {/* KPI summary */}
+    <div style={S.g(4)}><Met label="Published posts" value={published.length}/><Met label="Total reach" value={totalReach.toLocaleString()}/><Met label="Total engagement" value={totalEngage.toLocaleString()}/><Met label="Avg engagement rate" value={totalReach>0?((totalEngage/totalReach)*100).toFixed(1)+"%":"—"}/></div>
+
+    {/* Best post */}
+    {best&&<div style={{...S.card,background:`linear-gradient(135deg,${BRAND}10,${BRAND}03)`,border:`1px solid ${BRAND}25`,marginBottom:16}}>
+      <div style={{fontSize:11,fontWeight:600,color:BRAND,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>🏆 Best performing post</div>
+      <div style={{fontSize:15,fontWeight:500,marginBottom:4}}>{best.title}</div>
+      <div style={S.row}><span style={{fontSize:13,color:"var(--color-text-secondary)"}}>Reach: {best.reach.toLocaleString()}</span><span style={{fontSize:13,color:"var(--color-text-secondary)"}}>👍 {best.likes} · 💬 {best.comments} · ↗ {best.shares}</span></div>
+    </div>}
+
+    {/* Post stats table */}
+    <div style={S.card}>
+      <div style={{...S.row,justifyContent:"space-between",marginBottom:12}}>
+        <div style={S.ct}>Published posts</div>
+        <div style={{fontSize:12,color:"var(--color-text-tertiary)"}}>Click ✎ to update stats after posting</div>
+      </div>
+      <table style={S.tbl}><thead><tr><th style={S.th}>Date</th><th style={S.th}>Post</th><th style={S.th}>Reach</th><th style={S.th}>Impr.</th><th style={S.th}>Likes</th><th style={S.th}>Comments</th><th style={S.th}>Shares</th><th style={S.th}></th></tr></thead>
+      <tbody>{published.map(p=>{
+        const isEditing=editPostId===p.id;
+        return <tr key={p.id} style={{background:isEditing?BL:"transparent"}}>
+          <td style={S.td}>{fmt(p.date)}</td>
+          <td style={{...S.td,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{p.title}</td>
+          {isEditing
+            ?["reach","impressions","likes","comments","shares"].map(k=><td key={k} style={S.td}><input style={{...minp(),width:70,padding:"3px 6px",fontSize:12}} type="number" value={editVals[k]||0} onChange={e=>setEditVals(v=>({...v,[k]:Number(e.target.value)}))}/></td>)
+            :["reach","impressions","likes","comments","shares"].map(k=><td key={k} style={{...S.td,color:p[k]>0?"var(--color-text-primary)":"var(--color-text-tertiary)"}}>{p[k]>0?p[k].toLocaleString():"—"}</td>)
+          }
+          <td style={S.td}>{adm&&(isEditing
+            ?<div style={S.row}><button style={{...S.btn("p"),fontSize:11,padding:"3px 8px"}} onClick={saveEdit}>Save</button><button style={{...S.btn(),fontSize:11,padding:"3px 8px"}} onClick={()=>setEditPostId(null)}>×</button></div>
+            :<button style={{...S.btn(),fontSize:11,padding:"3px 8px"}} onClick={()=>openEdit(p)}>✎ Edit</button>
+          )}</td>
+        </tr>;
+      })}</tbody>
+      </table>
+    </div>
+
+    {/* Weekly history */}
+    {weekHistory.length>0&&<div style={S.card}>
+      <div style={S.ct}>Weekly LinkedIn tracker</div>
+      <table style={S.tbl}><thead><tr><th style={S.th}>Week</th><th style={S.th}>Followers</th><th style={S.th}>Follower change</th><th style={S.th}>Leads</th><th style={S.th}>Notes</th></tr></thead>
+      <tbody>{weekHistory.map(([wk,v],i)=>{
+        const nextWeek=weekHistory[i+1];const prevF=nextWeek?nextWeek[1].followers:0;
+        const diff=v.followers&&prevF?(v.followers-prevF):null;
+        return <tr key={wk}>
+          <td style={{...S.td,fontWeight:500}}>{wk}{wk===currentWeek&&<span style={{...S.bdg("booked"),marginLeft:6,fontSize:9}}>this week</span>}</td>
+          <td style={S.td}>{v.followers>0?v.followers.toLocaleString():"—"}</td>
+          <td style={S.td}>{diff!==null?<span style={{color:diff>=0?"#0F6E56":"#A32D2D",fontWeight:500}}>{diff>=0?"+":""}{diff}</span>:"—"}</td>
+          <td style={S.td}>{v.leads>0?v.leads:"—"}</td>
+          <td style={{...S.td,color:"var(--color-text-secondary)",fontSize:12}}>{v.notes||"—"}</td>
+        </tr>;
+      })}</tbody>
+      </table>
+    </div>}
+  </div>;
+}
+
+function IdeasBank({user,data,onSave}){
+  const adm=user.role==="admin";const[showAdd,setShowAdd]=useState(false);const[form,setForm]=useState({title:"",platform:"LinkedIn (personal)",angle:"",status:"idea"});
+  const ideas=[...(data.marketing?.ideas||[])].sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+  const updIdea=(id,ch)=>onSave({...data,marketing:{...data.marketing,ideas:(data.marketing?.ideas||[]).map(x=>x.id===id?{...x,...ch}:x)}});
+  return <div>
+    <div style={{...S.row,justifyContent:"space-between",marginBottom:4}}><div style={S.pt}>Ideas Bank</div><button style={S.btn("p")} onClick={()=>setShowAdd(true)}>+ Add idea</button></div>
+    <div style={S.ps}>Capture content ideas before they disappear</div>
+    <div style={S.g(4)}>{["idea","drafting","scheduled","published"].map(s=><Met key={s} label={s.charAt(0).toUpperCase()+s.slice(1)} value={ideas.filter(i=>i.status===s).length}/>)}</div>
+    <div style={S.g(2)}>{ideas.map(idea=><div key={idea.id} style={{...S.card,marginBottom:0}}><div style={{...S.row,justifyContent:"space-between",marginBottom:8}}><span style={S.bdg(idea.status)}>{idea.status}</span><span style={{fontSize:11,color:idea.platform.includes("personal")?"#1967D2":"#059669",fontWeight:500}}>{idea.platform.includes("personal")?"Personal":"Company"}</span></div><div style={{fontSize:14,fontWeight:500,marginBottom:4}}>{idea.title}</div>{idea.angle&&<div style={{fontSize:12,color:"var(--color-text-tertiary)",marginBottom:10,lineHeight:1.5}}>{idea.angle}</div>}<div style={{...S.row,justifyContent:"space-between"}}>{adm&&<select style={{...S.sel,width:"auto",fontSize:11}} value={idea.status} onChange={e=>updIdea(idea.id,{status:e.target.value})}>{["idea","drafting","scheduled","published"].map(s=><option key={s} value={s}>{s}</option>)}</select>}{adm&&<button style={{...S.btn(),fontSize:11,padding:"3px 8px",color:"#A32D2D"}} onClick={()=>onSave({...data,marketing:{...data.marketing,ideas:(data.marketing?.ideas||[]).filter(x=>x.id!==idea.id)}})}>Remove</button>}</div></div>)}</div>
+    {showAdd&&<div style={S.modal} onClick={e=>e.target===e.currentTarget&&setShowAdd(false)}><div style={S.mbox}><div style={{fontSize:15,fontWeight:600,marginBottom:16,color:"#111"}}>Add idea</div><div style={{marginBottom:12}}><label style={mlbl()}>Title / hook</label><input style={minp()} value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></div><div style={{marginBottom:12}}><label style={mlbl()}>Platform</label><select style={msel()} value={form.platform} onChange={e=>setForm({...form,platform:e.target.value})}><option>LinkedIn (personal)</option><option>LinkedIn (company)</option></select></div><div style={{marginBottom:12}}><label style={mlbl()}>Notes / angle</label><textarea style={{...minp(),height:80,resize:"vertical"}} value={form.angle} onChange={e=>setForm({...form,angle:e.target.value})}/></div><div style={{...S.row,justifyContent:"flex-end",gap:8,marginTop:20}}><button style={S.btn()} onClick={()=>setShowAdd(false)}>Cancel</button><button style={S.btn("p")} onClick={()=>{if(!form.title)return;onSave({...data,marketing:{...data.marketing,ideas:[{...form,id:Date.now(),createdAt:todayStr()},...(data.marketing?.ideas||[])]}});setShowAdd(false);setForm({title:"",platform:"LinkedIn (personal)",angle:"",status:"idea"});}}>Add</button></div></div></div>}
+  </div>;
+}
+
+function AiDraft(){
+  const[topic,setTopic]=useState("");const[tone,setTone]=useState("Direct and honest — no fluff");const[loading,setLoading]=useState(false);const[result,setResult]=useState("");const[err,setErr]=useState("");
+  const draft=async()=>{
+    if(!topic.trim())return;setLoading(true);setResult("");setErr("");
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:`You are writing LinkedIn content for Hannah Mitchell, founder of Momentum Sales — a fractional outbound sales agency helping creative/professional service agencies scale past £500k. Hannah's voice: direct, honest, no fluff, conversational, uses real numbers. Tone: ${tone}. Write ONE LinkedIn post. No hashtags unless natural. Don't start with "I". Hook first. Under 250 words.`,messages:[{role:"user",content:`Write a LinkedIn post about: ${topic}`}]})});
+      const d=await res.json();if(d.error)throw new Error(d.error.message);
+      setResult((d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join(""));
+    }catch(e){setErr("Error: "+e.message);}
+    setLoading(false);
+  };
+  return <div>
+    <div style={S.pt}>AI Draft</div><div style={S.ps}>Draft LinkedIn posts in Hannah's voice</div>
+    <div style={S.g(2)}>
+      <div style={S.card}><div style={S.ct}>What do you want to post about?</div>
+        <div style={{marginBottom:12}}><label style={S.lbl}>Tone</label><select style={S.sel} value={tone} onChange={e=>setTone(e.target.value)}><option>Direct and honest — no fluff</option><option>Storytelling — lead with a real moment</option><option>Contrarian — challenge a common belief</option><option>Tactical — teach something specific</option><option>Social proof — results-led</option></select></div>
+        <div style={{marginBottom:16}}><label style={S.lbl}>Topic / brief</label><textarea style={{...S.inp,height:120,resize:"vertical"}} value={topic} onChange={e=>setTopic(e.target.value)} placeholder="e.g. Why most agency owners never escape delivery mode"/></div>
+        <button style={{...S.btn("p"),width:"100%",padding:"10px"}} onClick={draft} disabled={loading||!topic.trim()}>{loading?"Drafting…":"Generate post →"}</button>
+        {err&&<div style={{fontSize:12,color:"#A32D2D",marginTop:8}}>{err}</div>}
+      </div>
+      <div style={S.card}><div style={{...S.row,justifyContent:"space-between",marginBottom:12}}><div style={S.ct}>Draft</div>{result&&<button style={{...S.btn(),fontSize:11}} onClick={()=>navigator.clipboard?.writeText(result)}>Copy</button>}</div>
+        {!result&&!loading&&<div style={{fontSize:13,color:"var(--color-text-tertiary)",lineHeight:1.6}}>Your draft will appear here. Requires internet connection.</div>}
+        {loading&&<div style={{fontSize:13,color:"var(--color-text-tertiary)"}}>Writing your post…</div>}
+        {result&&<textarea style={{...S.inp,height:320,resize:"vertical",fontSize:13,lineHeight:1.7}} value={result} onChange={e=>setResult(e.target.value)}/>}
+      </div>
+    </div>
+  </div>;
+}
+
+// ── Shell ─────────────────────────────────────────────────────────────────────
+function Shell({user,data,onSave,section,onSection,onLogout,onExport,onImport}){
+  return <div style={S.app}>
+    <Sidebar user={user} active={section} onNav={onSection} onLogout={onLogout} onExport={onExport} onImport={onImport}/>
+    <main style={S.main}>
+      {section==="overview"&&<Overview user={user} data={data} onNav={onSection}/>}
+      {section==="clients"&&<Clients user={user} data={data} onSave={onSave}/>}
+      {section==="meetings"&&<Meetings user={user} data={data} onSave={onSave}/>}
+      {section==="commissions"&&<Commissions user={user} data={data} onSave={onSave}/>}
+      {section==="clientcommissions"&&(user.role==="admin"||user.role==="ops")&&<ClientCommissions user={user} data={data} onSave={onSave}/>}
+      {section==="masterdata"&&<MasterData data={data}/>}
+      {section==="teamcalendar"&&<TeamCalendar user={user} data={data} onSave={onSave}/>}
+      {section==="mondaymeeting"&&<MondayMeeting user={user} data={data} onSave={onSave}/>}
+      {section==="training"&&<Training user={user} data={data} onSave={onSave}/>}
+      {section==="leave"&&<Leave user={user} data={data} onSave={onSave}/>}
+      {section==="documents"&&<Documents user={user} data={data} onSave={onSave}/>}
+      {section==="calendar"&&<ContentCalendar user={user} data={data} onSave={onSave}/>}
+      {section==="performance"&&<PostPerformance user={user} data={data} onSave={onSave}/>}
+      {section==="ideas"&&<IdeasBank user={user} data={data} onSave={onSave}/>}
+      {section==="aidraft"&&<AiDraft/>}
+    </main>
+  </div>;
+}
+
+// ── App ───────────────────────────────────────────────────────────────────────
+function App(){
+  const[user,setUser]=useState(null);
+  const[section,setSection]=useState("overview");
+  const[data,setData]=useState(null);
+  const[loading,setLoading]=useState(true);
+  const[saveStatus,setSaveStatus]=useState("saved"); // "saved"|"saving"|"error"
+
+  useEffect(()=>{
+    dbLoad().then(loaded=>{
+      // loaded will be {} if database is empty — treat that as no data
+      let d=(loaded&&loaded.clients)?loaded:SEED;
+      if(!d.closedWonDeals)d.closedWonDeals=[];
+      if(!d.clientInvoices)d.clientInvoices=[];
+      if(!d.mondayMeetings)d.mondayMeetings={};
+      if(!d.meetings)d.meetings=[];
+      if(!d.commissions)d.commissions=[];
+      if(!d.leaveRequests)d.leaveRequests=[];
+      if(!d.trainings)d.trainings=[];
+      if(!d.documents)d.documents=[];
+      if(!d.calendarEvents)d.calendarEvents=[];
+      if(!d.clients)d.clients=[];
+      if(!d.marketing)d.marketing={posts:[],ideas:[],weeklyStats:{}};
+      if(!d.marketing.posts)d.marketing.posts=[];
+      if(!d.marketing.ideas)d.marketing.ideas=[];
+      if(!d.marketing.weeklyStats)d.marketing.weeklyStats={};
+      if(d.clients)d.clients=d.clients.map(cl=>({closedWonValue:0,...cl,history:cl.history||[],actions:cl.actions||[],insights:cl.insights||[]}));
+      if(d.commissions)d.commissions=d.commissions.map(c=>({contact:"",...c}));
+      setData(d);
+      setLoading(false);
+    }).catch(()=>{
+      // If Supabase fails entirely, fall back to seed data
+      setData(SEED);
+      setLoading(false);
+    });
+  },[]);
+
+  const save=nd=>{
+    setData(nd);
+    setSaveStatus("saving");
+    dbSave(nd).then(()=>setSaveStatus("saved")).catch(()=>setSaveStatus("error"));
+  };
+
+  const exportData=()=>{
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);const a=document.createElement("a");
+    a.href=url;a.download=`momentum-hq-backup-${todayStr()}.json`;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+  };
+
+  const importData=async imported=>{
+    if(window.confirm("Replace all data with this backup? This will update the shared database for everyone."))await save(imported);
+  };
+
+  if(loading)return <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"var(--color-background-tertiary)",gap:16}}>
+    <div style={{width:36,height:36,borderRadius:"50%",background:BRAND,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:16,fontWeight:600}}>m</div>
+    <div style={{fontSize:14,color:"var(--color-text-tertiary)"}}>Loading Momentum HQ…</div>
+  </div>;
+
+  if(!user)return <Login onLogin={u=>{setUser(u);setSection("overview");}}/>;
+  return <>
+    <Shell user={user} data={data} onSave={save} section={section} onSection={setSection} onLogout={()=>{setUser(null);setSection("overview");}} onExport={exportData} onImport={importData}/>
+    <div style={{position:"fixed",bottom:12,right:16,fontSize:11,color:saveStatus==="error"?"#A32D2D":saveStatus==="saving"?"#854F0B":"#0F6E56",background:"#fff",padding:"3px 10px",borderRadius:12,boxShadow:"0 1px 4px rgba(0,0,0,0.1)",border:"0.5px solid var(--color-border-tertiary)",transition:"color 0.3s"}}>
+      {saveStatus==="saving"?"● Saving…":saveStatus==="error"?"⚠ Save failed — check connection":"● Saved"}
+    </div>
+  </>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
