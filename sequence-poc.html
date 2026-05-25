@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Sequence Builder POC — Momentum HQ</title>
+
+<!-- Same CDN setup as index.html: React 18 UMD + ReactDOM 18 UMD + Babel standalone -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+
+<!-- React Flow v10.3.17 — last UMD-published version before the @xyflow/react rebrand.
+     Exposes window.ReactFlowRenderer. Must load AFTER React/ReactDOM, BEFORE Babel parses our JSX. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-flow-renderer/10.3.17/umd/index.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/react-flow-renderer/10.3.17/style.min.css"/>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  background:#f5f5f3;
+  color:#1a1915;
+  min-height:100vh;
+}
+:root{
+  --color-background-primary:#ffffff;
+  --color-background-secondary:#f5f5f3;
+  --color-background-tertiary:#eeede9;
+  --color-text-primary:#1a1915;
+  --color-text-secondary:#5c5c57;
+  --color-text-tertiary:#9b9a96;
+  --color-border-tertiary:#e8e7e3;
+  --color-border-secondary:#d4d3cf;
+  --color-accent:#0F6E56;
+  --color-warn:#854F0B;
+  --color-error:#A32D2D;
+}
+
+/* Override React Flow's default node styling so it matches Momentum HQ */
+.react-flow__node-default{
+  background:#ffffff;
+  border:1px solid var(--color-border-secondary);
+  border-radius:8px;
+  font-size:13px;
+  font-weight:500;
+  color:var(--color-text-primary);
+  padding:10px 14px;
+  box-shadow:0 1px 2px rgba(0,0,0,0.04);
+  width:auto;
+  min-width:140px;
+}
+.react-flow__node-default.selected{
+  border-color:var(--color-accent);
+  box-shadow:0 0 0 2px rgba(15,110,86,0.15);
+}
+.react-flow__edge-path{
+  stroke:#9b9a96;
+  stroke-width:1.5;
+}
+.react-flow__handle{
+  background:#5c5c57;
+  width:8px;
+  height:8px;
+  border:2px solid #ffffff;
+}
+.react-flow__background{
+  background:#f5f5f3;
+}
+.react-flow__controls{
+  box-shadow:0 1px 4px rgba(0,0,0,0.08);
+  border-radius:6px;
+  overflow:hidden;
+}
+.react-flow__controls button{
+  background:#ffffff;
+  border-bottom:1px solid var(--color-border-tertiary);
+  width:28px;
+  height:28px;
+}
+.react-flow__controls button:hover{
+  background:var(--color-background-tertiary);
+}
+.react-flow__attribution{
+  background:rgba(255,255,255,0.7);
+  font-size:10px;
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const {useState,useEffect}=React;
+
+function POC(){
+  // Verify the UMD bundle loaded and exposed what we expect
+  const RF=window.ReactFlowRenderer;
+  const [diagnostic,setDiagnostic]=useState(null);
+
+  useEffect(()=>{
+    const checks={
+      windowReactFlowRenderer:typeof window.ReactFlowRenderer,
+      hasDefaultExport:!!(window.ReactFlowRenderer&&window.ReactFlowRenderer.default),
+      hasBackground:!!(window.ReactFlowRenderer&&window.ReactFlowRenderer.Background),
+      hasControls:!!(window.ReactFlowRenderer&&window.ReactFlowRenderer.Controls),
+      reactVersion:React.version,
+    };
+    setDiagnostic(checks);
+    console.log("[Sequence POC] Diagnostic checks:",checks);
+  },[]);
+
+  if(!RF||!RF.default){
+    return <div style={{padding:32,maxWidth:640,margin:"40px auto"}}>
+      <div style={{
+        background:"#fff",
+        border:"1px solid var(--color-border-secondary)",
+        borderRadius:10,
+        padding:24,
+      }}>
+        <div style={{fontSize:18,fontWeight:600,marginBottom:8,color:"var(--color-error)"}}>
+          ❌ React Flow failed to load
+        </div>
+        <div style={{fontSize:13,color:"var(--color-text-secondary)",marginBottom:16,lineHeight:1.6}}>
+          The <code style={{background:"#eeede9",padding:"1px 5px",borderRadius:3}}>window.ReactFlowRenderer</code> global is not available.
+          The CDN script either didn't load, was blocked, or doesn't expose a UMD bundle at the expected URL.
+        </div>
+        <pre style={{
+          fontSize:11,
+          background:"#1a1915",
+          color:"#eeede9",
+          padding:14,
+          borderRadius:6,
+          overflow:"auto",
+        }}>{JSON.stringify(diagnostic,null,2)}</pre>
+      </div>
+    </div>;
+  }
+
+  const ReactFlow=RF.default;
+  const {Background,Controls,MiniMap}=RF;
+
+  // Minimal 2-node, 1-edge demo
+  const defaultNodes=[
+    {id:"1",data:{label:"📞 Call · Day 1"},position:{x:160,y:80}},
+    {id:"2",data:{label:"✉️ Email · Day 3"},position:{x:160,y:240}},
+  ];
+  const defaultEdges=[
+    {id:"e1-2",source:"1",target:"2"},
+  ];
+
+  return <div style={{
+    minHeight:"100vh",
+    display:"flex",
+    flexDirection:"column",
+  }}>
+    {/* Header */}
+    <div style={{
+      background:"#fff",
+      borderBottom:"1px solid var(--color-border-tertiary)",
+      padding:"16px 24px",
+      display:"flex",
+      alignItems:"center",
+      justifyContent:"space-between",
+    }}>
+      <div>
+        <div style={{fontSize:12,color:"var(--color-text-tertiary)",fontWeight:500,letterSpacing:0.3,textTransform:"uppercase",marginBottom:2}}>
+          Step A · React Flow Proof-of-Concept
+        </div>
+        <div style={{fontSize:18,fontWeight:600,color:"var(--color-text-primary)"}}>
+          Sequence Builder canvas
+        </div>
+      </div>
+      <div style={{
+        display:"flex",
+        alignItems:"center",
+        gap:8,
+        fontSize:12,
+        color:"var(--color-accent)",
+        background:"rgba(15,110,86,0.08)",
+        padding:"6px 12px",
+        borderRadius:14,
+        fontWeight:500,
+      }}>
+        ● React Flow v10.3.17 loaded
+      </div>
+    </div>
+
+    {/* Diagnostic strip */}
+    <div style={{
+      background:"#fff",
+      borderBottom:"1px solid var(--color-border-tertiary)",
+      padding:"10px 24px",
+      fontSize:11,
+      color:"var(--color-text-secondary)",
+      display:"flex",
+      gap:24,
+      flexWrap:"wrap",
+    }}>
+      <span><strong style={{color:"var(--color-text-primary)"}}>React:</strong> {React.version}</span>
+      <span><strong style={{color:"var(--color-text-primary)"}}>ReactFlowRenderer:</strong> {typeof window.ReactFlowRenderer}</span>
+      <span><strong style={{color:"var(--color-text-primary)"}}>Default export:</strong> {RF.default?"✓":"✗"}</span>
+      <span><strong style={{color:"var(--color-text-primary)"}}>Background:</strong> {RF.Background?"✓":"✗"}</span>
+      <span><strong style={{color:"var(--color-text-primary)"}}>Controls:</strong> {RF.Controls?"✓":"✗"}</span>
+      <span><strong style={{color:"var(--color-text-primary)"}}>MiniMap:</strong> {RF.MiniMap?"✓":"✗"}</span>
+    </div>
+
+    {/* Canvas */}
+    <div style={{flex:1,minHeight:"calc(100vh - 110px)",position:"relative"}}>
+      <ReactFlow
+        defaultNodes={defaultNodes}
+        defaultEdges={defaultEdges}
+        fitView
+        fitViewOptions={{padding:0.3}}
+        proOptions={{hideAttribution:true}}
+      >
+        <Background gap={20} size={1} color="#d4d3cf"/>
+        <Controls showInteractive={false} position="bottom-right"/>
+      </ReactFlow>
+    </div>
+
+    {/* Footer note */}
+    <div style={{
+      position:"fixed",
+      bottom:16,
+      left:16,
+      background:"#fff",
+      border:"1px solid var(--color-border-tertiary)",
+      borderRadius:8,
+      padding:"10px 14px",
+      maxWidth:320,
+      fontSize:11,
+      color:"var(--color-text-secondary)",
+      lineHeight:1.5,
+      boxShadow:"0 2px 8px rgba(0,0,0,0.04)",
+    }}>
+      <div style={{fontWeight:600,color:"var(--color-text-primary)",marginBottom:4}}>What to verify</div>
+      Drag the nodes · pan the canvas · zoom with scroll or controls · connect by dragging from the handles.
+      If all that works, Step A is green and we can plan Steps B–D.
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<POC/>);
+</script>
+</body>
+</html>
